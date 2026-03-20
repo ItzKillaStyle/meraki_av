@@ -1,0 +1,3 @@
+#!/usr/bin/env python3
+from av_camera.camera_node import main
+main()

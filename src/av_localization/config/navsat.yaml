@@ -1,0 +1,17 @@
+# =============================================================================
+# navsat_transform_node — convierte NavSatFix → Odometry en frame odom
+# Necesita: /gps/fix + /imu/fused + /odometry/filtered
+# Publica:  /odometry/gps (entrada al EKF)
+# =============================================================================
+
+navsat_transform_node:
+  ros__parameters:
+    frequency: 10.0
+    delay: 3.0                    # segundos que espera antes de inicializar
+    magnetic_declination_radians: 0.0   # ajustar según ubicación geográfica
+    yaw_offset: 0.0               # offset entre heading GPS e IMU
+    zero_altitude: true           # ignora altitud en modo 2D
+    broadcast_utm_transform: false
+    publish_filtered_gps: true    # publica /gps/filtered para debug
+    use_odometry_yaw: false       # usa yaw de la IMU, no del GPS
+    wait_for_datum: false

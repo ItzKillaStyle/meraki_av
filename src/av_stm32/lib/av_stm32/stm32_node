@@ -1,0 +1,3 @@
+#!/usr/bin/env python3
+from av_stm32.stm32_node import main
+main()

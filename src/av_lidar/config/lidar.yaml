@@ -1,0 +1,5 @@
+lidar_node:
+  ros__parameters:
+    frame_id: lidar_link
+    range_min: 0.15
+    range_max: 8.0

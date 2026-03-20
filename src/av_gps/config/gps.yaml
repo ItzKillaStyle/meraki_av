@@ -1,0 +1,6 @@
+gps_node:
+  ros__parameters:
+    port: /dev/ttyUSB1      # ajusta según tu sistema: ttyUSB0 o ttyUSB1
+    baudrate: 9600          # NEO-8M default, puedes subir a 38400 con u-center
+    frame_id: gps_link
+    read_hz: 10.0           # NEO-8M por defecto envía a 1Hz, sube con u-center a 10Hz

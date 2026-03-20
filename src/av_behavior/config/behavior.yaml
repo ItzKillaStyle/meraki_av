@@ -1,0 +1,19 @@
+behavior_node:
+  ros__parameters:
+    loop_hz: 20.0                 # frecuencia del loop de decisiones
+
+    # Tiempos de espera
+    stop_sign_wait_s: 3.0         # segundos detenido ante señal STOP
+
+    # Distancias de transición (deben coincidir con obstacle_node)
+    obstacle_stop_dist: 0.30      # < 30cm → EMERGENCY_STOP
+    obstacle_dodge_dist: 0.80     # < 80cm → DODGE
+
+    # Calidad mínima de detección de carril para confiar en él
+    lane_quality_min: 0.30
+
+    # Distancia libre para dar por terminado el esquive
+    dodge_clear_dist: 1.0         # metros libres al frente para retomar carril
+
+    # Distancia para considerar waypoint alcanzado
+    waypoint_reach_m: 0.50        # metros

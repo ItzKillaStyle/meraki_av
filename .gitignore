@@ -1,0 +1,19 @@
+# ROS2 build artifacts
+build/
+install/
+log/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+*.egg
+
+# VS Code
+.vscode/
+.env
+
+# Sistema
+*.swp
+*.swo
+.DS_Store

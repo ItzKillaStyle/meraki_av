@@ -1,0 +1,23 @@
+obstacle_node:
+  ros__parameters:
+    range_min: 0.15             # ignora lecturas menores (ruido cercano)
+    range_max: 8.0              # rango máximo útil del S2L
+
+    # Distancias de freno de emergencia
+    stop_dist_front: 0.30       # freno inmediato si hay obstáculo frontal a <30cm
+    stop_dist_lateral: 0.20     # freno si hay obstáculo lateral a <20cm
+
+    # Distancias de precaución (activa lógica de esquive)
+    warn_dist_front: 0.80       # empieza a evaluar esquive desde 80cm
+    warn_dist_lateral: 0.50
+
+    # Zona frontal: ±45° respecto al eje del vehículo
+    front_half_angle: 45.0
+    rear_half_angle: 45.0
+
+    # Clustering
+    cluster_eps: 0.25           # dos puntos a <25cm son el mismo obstáculo
+    min_cluster_pts: 3          # mínimo de puntos para considerar un obstáculo real
+
+    # Esquive
+    dodge_angle_deg: 30.0       # ángulo de giro sugerido al esquivar

@@ -1,0 +1,3 @@
+#!/usr/bin/env python3
+from av_lidar.lidar_node import main
+main()

@@ -1,0 +1,21 @@
+# Archivo de waypoints GPS
+# Formato: lat/lon en grados decimales WGS84
+# Genera tus propios waypoints con Google Maps:
+#   clic derecho en el mapa → "¿Qué hay aquí?" → copia lat,lon
+
+waypoints:
+  - name: "Inicio"
+    lat: 10.391049
+    lon: -75.479426
+
+  - name: "Punto 1"
+    lat: 10.391150
+    lon: -75.479300
+
+  - name: "Punto 2"
+    lat: 10.391250
+    lon: -75.479180
+
+  - name: "Meta"
+    lat: 10.391350
+    lon: -75.479050

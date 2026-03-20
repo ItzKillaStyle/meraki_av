@@ -1,0 +1,6 @@
+localization_node:
+  ros__parameters:
+    frame_id: odom
+    child_frame_id: base_link
+    imu_weight: 0.5       # 0.5 = promedio exacto entre IMU frontal y trasera
+    publish_hz: 50.0      # frecuencia de publicación de IMU fusionada

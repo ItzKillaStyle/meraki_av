@@ -1,0 +1,26 @@
+control_node:
+  ros__parameters:
+    wheelbase: 0.40           # distancia entre ejes [m] — MEDIR Y AJUSTAR
+    track_width: 0.25         # distancia entre ruedas izq-der [m] — MEDIR Y AJUSTAR
+    max_speed_ms: 0.5         # velocidad máxima [m/s]
+    max_steering_rad: 0.5     # ángulo máximo del servo [rad] (~28°) — CALIBRAR
+    control_hz: 20.0          # frecuencia del loop de control [Hz]
+
+    # PID seguimiento de carril
+    # Ajuste inicial: kp=0.5 ki=0.0 kd=0.0, aumenta kp hasta que corrija bien
+    pid_lane_kp: 0.8
+    pid_lane_ki: 0.02
+    pid_lane_kd: 0.15
+
+    # PID waypoints GPS
+    pid_wp_kp: 1.0
+    pid_wp_ki: 0.01
+    pid_wp_kd: 0.20
+
+    # Velocidades por modo
+    speed_lane_ms: 0.40       # siguiendo carril
+    speed_waypoint_ms: 0.35   # navegando GPS
+    speed_dodge_ms: 0.20      # esquivando obstáculo
+
+    # Factor de giro durante esquive (0.0-1.0)
+    dodge_steer_factor: 0.60

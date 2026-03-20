@@ -1,0 +1,6 @@
+vision_node:
+  ros__parameters:
+    debug: false          # true → publica /vision/debug_image (costoso en RPi5)
+    alpha: 0.7            # suavizado exponencial: 0=sin suavizado, 1=muy lento
+    umbral_calidad: 0.3   # por debajo → usa valores filtrados anteriores
+    frame_id: camera_link

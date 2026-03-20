@@ -1,0 +1,3 @@
+#!/usr/bin/env python3
+from av_behavior.behavior_node import main
+main()

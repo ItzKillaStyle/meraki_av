@@ -1,0 +1,11 @@
+std_msgs/Header header
+string sign_type
+float32 confidence
+float32 distance
+uint8 NO_SIGN=0
+uint8 STOP=1
+uint8 GIVE_WAY=2
+uint8 SPEED_LIMIT=3
+uint8 TRAFFIC_LIGHT_RED=4
+uint8 TRAFFIC_LIGHT_GREEN=5
+uint8 id
