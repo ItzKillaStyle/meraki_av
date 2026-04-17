@@ -16,9 +16,7 @@ setup(
             glob('launch/*.py') if os.path.exists('launch') else []),
         ('share/' + package_name + '/config',
             glob('config/*.yaml') if os.path.exists('config') else []),
-        ('lib/' + package_name,
-            glob('lib/' + package_name + '/*')),
-    ],
+    ],  
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='victor',
@@ -29,6 +27,7 @@ setup(
     entry_points={
         'console_scripts': [
             'stm32_node = av_stm32.stm32_node:main',
+            'hc12_bridge = av_stm32.hc12_bridge:main',
         ],
     },
 )

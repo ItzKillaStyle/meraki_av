@@ -1,8 +1,8 @@
 control_node:
   ros__parameters:
-    wheelbase: 0.40           # distancia entre ejes [m] — MEDIR Y AJUSTAR
-    track_width: 0.25         # distancia entre ruedas izq-der [m] — MEDIR Y AJUSTAR
-    max_speed_ms: 0.5         # velocidad máxima [m/s]
+    wheelbase: 0.69           # distancia entre ejes [m] — MEDIR Y AJUSTAR
+    track_width: 0.59         # distancia entre ruedas izq-der [m] — MEDIR Y AJUSTAR
+    max_speed_ms: 2.5         # velocidad máxima [m/s]
     max_steering_rad: 0.5     # ángulo máximo del servo [rad] (~28°) — CALIBRAR
     control_hz: 20.0          # frecuencia del loop de control [Hz]
 

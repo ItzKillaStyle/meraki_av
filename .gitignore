@@ -17,3 +17,21 @@ __pycache__/
 *.swp
 *.swo
 .DS_Store
+
+# Modelos YOLO
+*.pt
+*.onnx
+*.weights
+
+# Datasets
+*.zip
+meraki_senales_dataset/
+meraki_vision/
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# Entornos virtuales
+*_env/
+venv/

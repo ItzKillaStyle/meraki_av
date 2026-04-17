@@ -29,6 +29,7 @@ setup(
     entry_points={
         'console_scripts': [
             'camera_node = av_camera.camera_node:main',
+            'video_publisher = av_camera.video_publisher:main',
         ],
     },
 )

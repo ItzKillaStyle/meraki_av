@@ -115,9 +115,9 @@ class ControlNode(Node):
         super().__init__('control_node')
 
         # ── Parámetros ────────────────────────────────────────────────────────
-        self.declare_parameter('wheelbase',          0.40)
-        self.declare_parameter('track_width',        0.25)
-        self.declare_parameter('max_speed_ms',       0.5)
+        self.declare_parameter('wheelbase',          0.65)  
+        self.declare_parameter('track_width',        0.55)
+        self.declare_parameter('max_speed_ms',       2.5)
         self.declare_parameter('max_steering_rad',   0.5)
         self.declare_parameter('control_hz',         20.0)
 
