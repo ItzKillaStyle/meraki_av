@@ -38,7 +38,12 @@ class HC12Bridge(Node):
         self.create_subscription(String, '/imu/rear',
             lambda m: self._cache_tel('imu_r', m.data), 10)
 
-        self.tel = {'uf': 0.0, 'ur': 0.0}
+        self.tel = {
+            'uf':    0.0,
+            'ur':    0.0,
+            'imu_f': {},
+            'imu_r': {},
+        }
 
         # Serial HC-12
         try:
@@ -56,7 +61,13 @@ class HC12Bridge(Node):
         threading.Thread(target=self._reader, daemon=True).start()
 
     def _cache_tel(self, key, val):
-        self.tel[key] = round(float(val), 2)
+        if key in ('imu_f', 'imu_r'):
+            try:
+                self.tel[key] = json.loads(val)
+            except:
+                self.tel[key] = {}
+        else:
+            self.tel[key] = round(float(val), 2)
 
     def _send_telemetry(self):
         if not self.ser or not self.ser.is_open:
