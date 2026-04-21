@@ -62,12 +62,28 @@ class HC12Bridge(Node):
         if not self.ser or not self.ser.is_open:
             return
         try:
+            # Parsear imu si viene como string
+            imu_f = self.tel['imu_f']
+            imu_r = self.tel['imu_r']
+            
+            if isinstance(imu_f, str):
+                try:
+                    imu_f = json.loads(imu_f)
+                except:
+                    imu_f = {}
+                    
+            if isinstance(imu_r, str):
+                try:
+                    imu_r = json.loads(imu_r)
+                except:
+                    imu_r = {}
+
             msg = json.dumps({
                 't':     'tel',
                 'uf':    self.tel['uf'],
                 'ur':    self.tel['ur'],
-                'imu_f': self.tel['imu_f'],
-                'imu_r': self.tel['imu_r']
+                'imu_f': imu_f,
+                'imu_r': imu_r,
             }) + '\n'
             self.ser.write(msg.encode('utf-8'))
         except Exception as e:
