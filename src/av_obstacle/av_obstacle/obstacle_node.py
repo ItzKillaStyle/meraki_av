@@ -26,22 +26,22 @@ class ObstacleNode(Node):
         super().__init__('obstacle_node')
 
         # ── Parámetros ────────────────────────────────────────────────────────
-        self.declare_parameter('range_min',          0.15)
+        self.declare_parameter('range_min',          0.3)
         self.declare_parameter('range_max',          8.0)
 
         # Distancias de alerta por zona
-        self.declare_parameter('stop_dist_front',    0.30)   # freno inmediato
-        self.declare_parameter('stop_dist_lateral',  0.20)   # lateral más permisivo
-        self.declare_parameter('warn_dist_front',    0.80)   # zona de precaución
-        self.declare_parameter('warn_dist_lateral',  0.50)
+        self.declare_parameter('stop_dist_front',    0.80)   # freno inmediato
+        self.declare_parameter('stop_dist_lateral',  0.40)   # lateral más permisivo
+        self.declare_parameter('warn_dist_front',    1.50)   # zona de precaución
+        self.declare_parameter('warn_dist_lateral',  0.80)
 
         # Ángulos de zona frontal (grados)
         self.declare_parameter('front_half_angle',   45.0)   # ±45° = 90° frontal
         self.declare_parameter('rear_half_angle',    45.0)   # ±45° trasero
 
         # Clustering
-        self.declare_parameter('cluster_eps',        0.25)   # metros
-        self.declare_parameter('min_cluster_pts',    3)
+        self.declare_parameter('cluster_eps',        0.20)   # metros
+        self.declare_parameter('min_cluster_pts',    4)
 
         # Esquive
         self.declare_parameter('dodge_angle_deg',    30.0)   # ángulo de giro esquive
@@ -128,6 +128,12 @@ class ObstacleNode(Node):
                 estop = True
                 self.get_logger().warn(
                     f'OBSTACULO LATERAL a {min_lat:.2f}m — FRENO')
+                
+        if np.any(rear_mask):
+            min_rear = ranges[rear_mask].min()
+            if min_rear <= self.stop_dist_front:  # mismo umbral que frontal
+                estop = True
+                self.get_logger().warn(f'OBSTACULO TRASERO a {min_rear:.2f}m — FRENO')  
 
         estop_msg      = Bool()
         estop_msg.data = estop
@@ -219,24 +225,21 @@ class ObstacleNode(Node):
     # ── Clustering euclidiano simple ──────────────────────────────────────────
 
     def _cluster(self, pts: np.ndarray) -> list:
-        """
-        Clustering por distancia euclidiana mínima.
-        Retorna lista de arrays numpy, uno por cluster.
-        """
         if len(pts) == 0:
             return []
-
+        
         clusters = []
-        visited  = set()
+        visited  = np.zeros(len(pts), dtype=bool)
 
         for i in range(len(pts)):
-            if i in visited:
+            if visited[i]:
                 continue
-            dists   = np.linalg.norm(pts - pts[i], axis=1)
-            members = np.where(dists < self.cluster_eps)[0]
+            diffs   = pts - pts[i]
+            dists   = np.einsum('ij,ij->i', diffs, diffs)  # distancia² sin sqrt
+            members = np.where(dists < self.cluster_eps ** 2)[0]
             if len(members) >= self.min_cluster_pts:
                 clusters.append(pts[members])
-                visited.update(members.tolist())
+                visited[members] = True
 
         return clusters
 

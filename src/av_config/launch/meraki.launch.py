@@ -78,6 +78,14 @@ def generate_launch_description():
         output='screen',
     )
 
+    microros_agent = Node(
+        package='micro_ros_agent',
+        executable='micro_ros_agent',
+        name='micro_ros_agent',
+        arguments=['serial', '--dev', '/dev/ttyUSB0', '-b', '115200'],
+        output='screen',
+    )
+
     # ═══════════════════════════════════════════════════════════════════════════
     # 2. COMUNICACIÓN — HC-12 bridge (control manual via radio)
     # ═══════════════════════════════════════════════════════════════════════════
@@ -110,6 +118,16 @@ def generate_launch_description():
         package='rplidar_ros',
         executable='rplidar_composition',
         name='rplidar_node',
+        parameters=[cfg('av_lidar', 'lidar.yaml')],
+        output='screen',
+        condition=IfCondition(use_lidar),
+    )
+
+
+    av_lidar_node = Node(
+        package='av_lidar',
+        executable='lidar_node',
+        name='lidar_node',
         parameters=[cfg('av_lidar', 'lidar.yaml')],
         output='screen',
         condition=IfCondition(use_lidar),
@@ -216,27 +234,38 @@ def generate_launch_description():
     # Orden de lanzamiento con delays para evitar race conditions
     # ═══════════════════════════════════════════════════════════════════════════
     return LaunchDescription(args + [
-        # Inmediato — hardware y comunicación
-        stm32_node,
-        hc12_node,
-        camera_node,
-        gps_node,
 
-        # 2s delay — sensores que necesitan hardware listo
-        TimerAction(period=2.0, actions=[lidar_node]),
+        # 1. Primero el agente — debe estar listo antes que el STM32
+        microros_agent,
 
-        # 3s delay — percepción necesita cámara lista
-        TimerAction(period=3.0, actions=[
+        # 2. 2s — STM32 espera al agente, HC-12 y sensores pasivos
+        TimerAction(period=2.0, actions=[
+            stm32_node,
+            hc12_node,
+            camera_node,
+            gps_node,
+        ]),
+
+        # 3. 4s — LiDAR necesita hardware listo
+        TimerAction(period=4.0, actions=[
+            lidar_node,
+            av_lidar_node
+        ]),
+
+        # 4. 6s — percepción necesita cámara y LiDAR listos
+        TimerAction(period=6.0, actions=[
             vision_node,
             traffic_sign_node,
             obstacle_node,
         ]),
 
-        # 4s delay — localización necesita IMU y GPS
-        TimerAction(period=4.0, actions=[localization_node]),
+        # 5. 8s — localización necesita IMU y GPS publicando
+        TimerAction(period=8.0, actions=[
+            localization_node,
+        ]),
 
-        # 5s delay — planificación y comportamiento al final
-        TimerAction(period=5.0, actions=[
+        # 6. 10s — planificación y control al final
+        TimerAction(period=10.0, actions=[
             planner_node,
             behavior_node,
             control_node,
