@@ -270,21 +270,18 @@ class ControlNode(Node):
     # ── Publicación con diferencial Ackermann ─────────────────────────────────
 
     def _send(self, steering_rad: float, speed_ms: float):
-        """
-        Aplica diferencial Ackermann y publica 5 valores:
-        [servo_norm, m1_FL, m2_FR, m3_RL, m4_RR]
-        Todos en rango -1.0..1.0
-        """
-        servo_norm = float(np.clip(
-            steering_rad / self.max_steer, -1.0, 1.0))
-        speed_norm = float(np.clip(
-            speed_ms / self.max_speed, -1.0, 1.0))
+        # Convertir radianes a grados 0-180
+        # -max_steer → 0°, 0 → 90°, +max_steer → 180°
+        servo_deg = 90.0 + float(np.degrees(
+            np.clip(steering_rad, -self.max_steer, self.max_steer)
+        ))
+        servo_deg = float(np.clip(servo_deg, 0.0, 180.0))
 
-        v_FL, v_FR, v_RL, v_RR = self.ackermann.compute(
-            steering_rad, speed_norm)
+        speed_norm = float(np.clip(speed_ms / self.max_speed, -1.0, 1.0))
+        v_FL, v_FR, v_RL, v_RR = self.ackermann.compute(steering_rad, speed_norm)
 
         cmd      = Float32MultiArray()
-        cmd.data = [servo_norm, v_FL, v_FR, v_RL, v_RR]
+        cmd.data = [servo_deg, v_FL, v_FR, v_RL, v_RR]
         self.pub_pwm.publish(cmd)
 
         ack                      = AckermannDriveStamped()
@@ -292,13 +289,6 @@ class ControlNode(Node):
         ack.drive.steering_angle = steering_rad
         ack.drive.speed          = speed_ms
         self.pub_ackermann_out.publish(ack)
-
-        self.get_logger().debug(
-            f'prio={self.current_prio} | '
-            f'servo={servo_norm:+.2f} | '
-            f'FL={v_FL:+.2f} FR={v_FR:+.2f} '
-            f'RL={v_RL:+.2f} RR={v_RR:+.2f}'
-        )
 
     def destroy_node(self):
         self._send(0.0, 0.0)

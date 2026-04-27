@@ -13,6 +13,7 @@ from nav_msgs.msg import Path
 import serial
 import json
 import threading
+import numpy as np
 
 
 class HC12Bridge(Node):
@@ -188,17 +189,19 @@ class HC12Bridge(Node):
 
             # Control manual (joystick + servo)
             if t == 'cmd':
-                from std_msgs.msg import Bool
+                s_norm = float(obj.get('s', 0.0))
+                # HMI manda -1..1, convertir a 0-180
+                s_deg  = float(np.clip(90.0 + s_norm * 90.0, 0.0, 180.0))
+
                 msg = Float32MultiArray()
                 msg.data = [
-                    float(obj.get('s',  0.0)),  # servo
-                    float(obj.get('rl', 0.0)),  # RL
-                    float(obj.get('rr', 0.0)),  # RR
-                    float(obj.get('fl', 0.0)),  # FL
-                    float(obj.get('fr', 0.0)),  # FR
+                    s_deg,
+                    float(obj.get('rl', 0.0)),
+                    float(obj.get('rr', 0.0)),
+                    float(obj.get('fl', 0.0)),
+                    float(obj.get('fr', 0.0)),
                 ]
                 self.pub_pwm.publish(msg)
-                self.get_logger().debug(f'CMD: {msg.data}')
 
             # Waypoints desde HMI → Planner
             elif t == 'waypoints':
