@@ -95,7 +95,7 @@ def generate_launch_description():
         executable='hc12_bridge',
         name='hc12_bridge',
         parameters=[{
-            'port': '/dev/ttyUSB1',
+            'port': '/dev/ttyHC12',
             'baud': 9600,
         }],
         output='screen',

@@ -1,8 +1,8 @@
 camera_node:
   ros__parameters:
-    device: /dev/video0         # verifica con: ls /dev/video*
-    width: 1920
-    height: 1080
-    fps: 15
+    device: /dev/video0 # verifica con: ls /dev/video*
+    width: 640
+    height: 480
+    fps: 30
     frame_id: camera_link
-    compressed_quality: 80      # calidad JPEG 0-100 para stream de debug remoto
+    compressed_quality: 80 # calidad JPEG 0-100 para stream de debug remoto
