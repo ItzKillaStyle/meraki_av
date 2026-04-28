@@ -14,7 +14,8 @@ import serial
 import json
 import threading
 import numpy as np
-
+from std_msgs.msg import Bool
+import time
 
 class HC12Bridge(Node):
     def __init__(self):
@@ -26,12 +27,16 @@ class HC12Bridge(Node):
         port = self.get_parameter('port').value
         baud = self.get_parameter('baud').value
 
+        #PUblisher - Modo teleoperado
+        self.pub_teleop = self.create_publisher(Bool, '/teleop/active', 10)
+        self._teleop_timer = self.create_timer(0.5, self._teleop_watchdog)
+        self._last_cmd_time = 0.0
+
         # Publisher → STM32
         self.pub_pwm = self.create_publisher(
             Float32MultiArray, '/control/pwm_cmd', 10)
 
         # Publishers → Planner (desde HMI)
-        from std_msgs.msg import Bool
         self.pub_waypoints = self.create_publisher(
             String, '/planning/set_waypoints_str', 10)
         self.pub_active = self.create_publisher(
@@ -190,7 +195,6 @@ class HC12Bridge(Node):
             # Control manual (joystick + servo)
             if t == 'cmd':
                 s_norm = float(obj.get('s', 0.0))
-                # HMI manda -1..1, convertir a 0-180
                 s_deg  = float(np.clip(90.0 + s_norm * 90.0, 0.0, 180.0))
 
                 msg = Float32MultiArray()
@@ -202,6 +206,11 @@ class HC12Bridge(Node):
                     float(obj.get('fr', 0.0)),
                 ]
                 self.pub_pwm.publish(msg)
+
+                teleop_msg = Bool()
+                teleop_msg.data = True
+                self.pub_teleop.publish(teleop_msg)
+                self._last_cmd_time = time.time()
 
             # Waypoints desde HMI → Planner
             elif t == 'waypoints':
@@ -218,14 +227,12 @@ class HC12Bridge(Node):
 
             # Activar/desactivar navegación
             elif t == 'activate':
-                from std_msgs.msg import Bool
                 msg = Bool()
                 msg.data = True
                 self.pub_active.publish(msg)
                 self.get_logger().info('Navegación activada desde HMI')
 
             elif t == 'deactivate':
-                from std_msgs.msg import Bool
                 msg = Bool()
                 msg.data = False
                 self.pub_active.publish(msg)
@@ -234,9 +241,8 @@ class HC12Bridge(Node):
             elif t == 'estop':
                 # Detener motores inmediatamente
                 stop = Float32MultiArray()
-                stop.data = [0.0, 0.0, 0.0, 0.0, 0.0]
+                stop.data = [90.0, 0.0, 0.0, 0.0, 0.0]
                 self.pub_pwm.publish(stop)
-                from std_msgs.msg import Bool
                 msg = Bool()
                 msg.data = False
                 self.pub_active.publish(msg)
@@ -244,6 +250,12 @@ class HC12Bridge(Node):
 
         except json.JSONDecodeError:
             self.get_logger().warning(f'JSON inválido: {line}')
+
+    def _teleop_watchdog(self):
+        if time.time() - self._last_cmd_time > 1.0:
+            msg = Bool()
+            msg.data = False
+            self.pub_teleop.publish(msg)
 
     def destroy_node(self):
         self._running = False

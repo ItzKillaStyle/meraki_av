@@ -4,7 +4,7 @@
   <name>av_vision</name>
   <version>0.1.0</version>
   <description>Vision package for autonomous vehicle</description>
-  <maintainer email="victor@email.com">victor</maintainer>
+  <maintainer email="savictorac1@gmail.com">Victor Chamorro</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_python</buildtool_depend>

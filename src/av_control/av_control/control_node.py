@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import numpy as np
 
 import rclpy
@@ -9,6 +10,7 @@ from av_interfaces.msg import LaneDetection
 
 
 # ── Prioridades de comando ────────────────────────────────────────────────────
+PRIO_TELEOP   = 0  # máxima prioridad
 PRIO_LANE     = 1
 PRIO_WAYPOINT = 2
 PRIO_DODGE    = 3
@@ -62,40 +64,28 @@ class AckermannDifferential:
     """
 
     def __init__(self, wheelbase: float, track_width: float):
-        self.L = wheelbase    # distancia entre ejes [m]
-        self.T = track_width  # distancia entre ruedas izq-der [m]
+        self.L = wheelbase
+        self.T = track_width
 
     def compute(self, steering_rad: float,
                 speed_norm: float) -> tuple[float, float, float, float]:
-        """
-        Retorna (v_FL, v_FR, v_RL, v_RR) normalizadas en -1.0..1.0.
-        speed_norm es la velocidad base normalizada del vehículo.
-        """
         if abs(steering_rad) < 0.01:
             v = float(np.clip(speed_norm, -1.0, 1.0))
             return v, v, v, v
 
-        # Radio de giro respecto al centro del eje trasero
-        R = self.L / np.tan(abs(steering_rad))
-
-        # Radios de cada rueda
-        r_inner = max(R - self.T / 2.0, 0.01)   # nunca negativo
+        R       = self.L / np.tan(abs(steering_rad))
+        r_inner = max(R - self.T / 2.0, 0.01)
         r_outer = R + self.T / 2.0
-
-        # Factores relativos normalizados por la rueda más rápida
-        f_inner = r_inner / r_outer   # < 1.0
-        f_outer = 1.0                 # rueda externa = velocidad base
-
-        base = float(np.clip(speed_norm, -1.0, 1.0))
+        f_inner = r_inner / r_outer
+        f_outer = 1.0
+        base    = float(np.clip(speed_norm, -1.0, 1.0))
 
         if steering_rad > 0:
-            # Izquierda interna, derecha externa
             v_FL = base * f_inner
             v_FR = base * f_outer
             v_RL = base * f_inner
             v_RR = base * f_outer
         else:
-            # Derecha interna, izquierda externa
             v_FL = base * f_outer
             v_FR = base * f_inner
             v_RL = base * f_outer
@@ -115,7 +105,7 @@ class ControlNode(Node):
         super().__init__('control_node')
 
         # ── Parámetros ────────────────────────────────────────────────────────
-        self.declare_parameter('wheelbase',          0.65)  
+        self.declare_parameter('wheelbase',          0.65)
         self.declare_parameter('track_width',        0.55)
         self.declare_parameter('max_speed_ms',       2.5)
         self.declare_parameter('max_steering_rad',   0.5)
@@ -160,6 +150,7 @@ class ControlNode(Node):
             -self.max_steer, self.max_steer)
 
         # ── Estado ────────────────────────────────────────────────────────────
+        self.teleop_active = False  # ← NUEVO
         self.emergency     = False
         self.lane_offset   = 0.0
         self.lane_quality  = 0.0
@@ -174,16 +165,17 @@ class ControlNode(Node):
 
         # ── Subscribers ───────────────────────────────────────────────────────
         self.create_subscription(
+            Bool, '/teleop/active', self.cb_teleop, 10)       # ← NUEVO
+        self.create_subscription(
             Bool, '/emergency_stop', self.cb_estop, 10)
         self.create_subscription(
             LaneDetection, '/perception/lanes', self.cb_lanes, 10)
         self.create_subscription(
             Point, '/perception/dodge_direction', self.cb_dodge, 10)
         self.create_subscription(
-            AckermannDriveStamped, '/control/cmd', self.cb_ackermann, 10)
+            AckermannDriveStamped, '/planning/waypoint_cmd', self.cb_ackermann, 10)
 
         # ── Publishers ────────────────────────────────────────────────────────
-        # 5 valores → [servo_norm, m1_FL, m2_FR, m3_RL, m4_RR]
         self.pub_pwm = self.create_publisher(
             Float32MultiArray, '/control/pwm_cmd', 10)
 
@@ -196,10 +188,21 @@ class ControlNode(Node):
             f'Control node iniciado — {self.control_hz}Hz | '
             f'wheelbase={self.wheelbase}m track={self.track_width}m | '
             f'Diferencial Ackermann ACTIVO | '
-            f'pwm_cmd → [servo, FL, FR, RL, RR]'
+            f'pwm_cmd → [servo_deg, FL, FR, RL, RR]'
         )
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
+
+    def cb_teleop(self, msg: Bool):
+        """Teleoperación activa — HC-12 Bridge manda directo, inhibir control_node."""
+        prev = self.teleop_active
+        self.teleop_active = msg.data
+        if self.teleop_active and not prev:
+            self.pid_lane.reset()
+            self.pid_wp.reset()
+            self.get_logger().info('Modo TELEOP activado')
+        elif not self.teleop_active and prev:
+            self.get_logger().info('Modo TELEOP desactivado — volviendo a autónomo')
 
     def cb_estop(self, msg: Bool):
         self.emergency = msg.data
@@ -231,9 +234,15 @@ class ControlNode(Node):
         dt  = (now - self.last_time).nanoseconds / 1e9
         self.last_time = now
 
+        # P0: Teleop — HC-12 Bridge publica directo, no interferir
+        if self.teleop_active:
+            self.current_prio = PRIO_TELEOP
+            return
+
         # P4: Emergencia
         if self.emergency:
             self._send(0.0, 0.0)
+            self.current_prio = PRIO_ESTOP
             return
 
         # P3: Esquive
@@ -289,6 +298,13 @@ class ControlNode(Node):
         ack.drive.steering_angle = steering_rad
         ack.drive.speed          = speed_ms
         self.pub_ackermann_out.publish(ack)
+
+        self.get_logger().debug(
+            f'prio={self.current_prio} | '
+            f'servo={servo_deg:.1f}° | '
+            f'FL={v_FL:+.2f} FR={v_FR:+.2f} '
+            f'RL={v_RL:+.2f} RR={v_RR:+.2f}'
+        )
 
     def destroy_node(self):
         self._send(0.0, 0.0)

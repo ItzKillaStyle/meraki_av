@@ -3,7 +3,7 @@
   <name>av_interfaces</name>
   <version>0.1.0</version>
   <description>Custom messages, services and actions for autonomous vehicle</description>
-  <maintainer email="tu@email.com">Tu Nombre</maintainer>
+  <maintainer email="savictorac1@gmail.com">Victor Chamorro</maintainer>
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
