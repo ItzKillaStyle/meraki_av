@@ -14,7 +14,7 @@ class GpsNode(Node):
         super().__init__('gps_node')
 
         # ── Parámetros ────────────────────────────────────────────────────────
-        self.declare_parameter('port',      '/dev/ttyUSB0')
+        self.declare_parameter('port',      '/dev/ttyGPS')
         self.declare_parameter('baudrate',  9600)
         self.declare_parameter('frame_id',  'gps_link')
         self.declare_parameter('read_hz',   10.0)

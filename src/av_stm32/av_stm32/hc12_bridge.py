@@ -21,7 +21,7 @@ class HC12Bridge(Node):
         super().__init__('hc12_bridge')
 
         # Parámetros
-        self.declare_parameter('port', '/dev/ttyUSB1')
+        self.declare_parameter('port', '/dev/ttyHC12')
         self.declare_parameter('baud', 9600)
         port = self.get_parameter('port').value
         baud = self.get_parameter('baud').value

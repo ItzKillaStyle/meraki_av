@@ -82,7 +82,7 @@ def generate_launch_description():
         package='micro_ros_agent',
         executable='micro_ros_agent',
         name='micro_ros_agent',
-        arguments=['serial', '--dev', '/dev/ttyACM0', '-b', '115200'],
+        arguments=['serial', '--dev', '/dev/ttyAMA0', '-b', '115200'],
         output='screen',
     )
 
@@ -116,13 +116,12 @@ def generate_launch_description():
 
     lidar_node = Node(
         package='rplidar_ros',
-        executable='rplidar_composition',
+        executable='rplidar_node',
         name='rplidar_node',
         parameters=[cfg('av_lidar', 'lidar.yaml')],
         output='screen',
         condition=IfCondition(use_lidar),
     )
-
 
     av_lidar_node = Node(
         package='av_lidar',
