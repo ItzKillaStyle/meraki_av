@@ -1,6 +1,8 @@
 std_msgs/Header header
+float32 center_offset
+float32 heading_angle
+float32 detection_quality
 float32[] left_coeffs
 float32[] right_coeffs
-float32 center_offset
 bool left_detected
 bool right_detected

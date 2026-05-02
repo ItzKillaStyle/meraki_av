@@ -34,6 +34,8 @@ class VisionNode(Node):
         self.angulo_filtrado  = 0.0
         self.calidad_filtrada = 0.0
         self.tiene_valor      = False
+        self.frames_sin_deteccion = 0          # NUEVO: para reset de estado
+        self.MAX_FRAMES_SIN_DETECCION = 30     # ~1.5s a 20fps
 
         # ── Subscribers ───────────────────────────────────────────────────────
         self.sub_image = self.create_subscription(
@@ -50,7 +52,6 @@ class VisionNode(Node):
             10
         )
 
-        # Topic de debug — solo se publica si debug=true
         self.pub_debug = self.create_publisher(
             Image,
             '/vision/debug_image',
@@ -76,7 +77,7 @@ class VisionNode(Node):
             self.get_logger().error(f'CvBridge error: {e}')
             return
 
-        # 2) Procesamiento de líneas (tu lógica original intacta)
+        # 2) Procesamiento de líneas
         try:
             frame_resultado, analisis = detectar_y_analizar_lineas(frame)
         except Exception as e:
@@ -93,7 +94,7 @@ class VisionNode(Node):
         tiene_cen = datos_cen['intermitencia'] > 0
         tiene_der = datos_der['intermitencia'] > 0
 
-        # 3) Calcular offset y ángulo (lógica original preservada)
+        # 3) Calcular offset y ángulo
         if tiene_izq and tiene_der:
             x_centro_carril = 0.5 * (datos_izq['x_base'] + datos_der['x_base'])
             offset_pix      = x_centro_carril - (w / 2.0)
@@ -134,18 +135,32 @@ class VisionNode(Node):
         else:
             calidad = 0.0
 
-        # 5) Filtro exponencial
+        # 5) Filtro exponencial con reset automático
         if calidad < self.umbral_calidad:
             self.get_logger().warn(
                 f'Calidad baja ({calidad:.2f}) zona={zona_ref} — usando valores filtrados'
             )
+            self.frames_sin_deteccion += 1
+
             if self.tiene_valor:
                 self.calidad_filtrada = self._suavizar(self.calidad_filtrada, 0.0)
             else:
                 self.offset_filtrado  = 0.0
                 self.angulo_filtrado  = 0.0
                 self.calidad_filtrada = 0.0
+
+            # Reset del estado filtrado tras N frames consecutivos sin detección
+            if self.frames_sin_deteccion >= self.MAX_FRAMES_SIN_DETECCION:
+                self.tiene_valor = False
+                self.offset_filtrado  = 0.0
+                self.angulo_filtrado  = 0.0
+                self.calidad_filtrada = 0.0
+                self.get_logger().warn(
+                    f'Sin detección por {self.frames_sin_deteccion} frames — '
+                    f'estado filtrado reseteado'
+                )
         else:
+            self.frames_sin_deteccion = 0
             if not self.tiene_valor:
                 self.offset_filtrado  = offset_norm
                 self.angulo_filtrado  = angulo
@@ -156,21 +171,19 @@ class VisionNode(Node):
                 self.angulo_filtrado  = self._suavizar(self.angulo_filtrado,  angulo)
                 self.calidad_filtrada = self._suavizar(self.calidad_filtrada, calidad)
 
-        # 6) Publicar LaneDetection (mensaje custom av_interfaces)
-        lane_msg                = LaneDetection()
-        lane_msg.header.stamp   = self.get_clock().now().to_msg()
-        lane_msg.header.frame_id = self.frame_id
+        # 6) Publicar LaneDetection — campos explícitos, sin convenciones implícitas
+        lane_msg                    = LaneDetection()
+        lane_msg.header.stamp       = self.get_clock().now().to_msg()
+        lane_msg.header.frame_id    = self.frame_id
 
-        # Offset y ángulo filtrados
-        lane_msg.center_offset  = float(self.offset_filtrado)
+        lane_msg.center_offset      = float(self.offset_filtrado)
+        lane_msg.heading_angle      = float(self.angulo_filtrado)   # NUEVO campo
+        lane_msg.detection_quality  = float(self.calidad_filtrada)  # NUEVO campo
 
-        # Coeficientes lineales como [pendiente, angulo_filtrado]
-        # left_coeffs  → [pendiente izquierda, calidad]
-        # right_coeffs → [pendiente derecha,   angulo filtrado]
-        lane_msg.left_coeffs  = [float(datos_izq['pendiente_prom']),
-                                  float(self.calidad_filtrada)]
-        lane_msg.right_coeffs = [float(datos_der['pendiente_prom']),
-                                  float(self.angulo_filtrado)]
+        # left_coeffs / right_coeffs mantienen pendientes por compatibilidad
+        # con posibles consumidores futuros, pero ya no codifican calidad/ángulo
+        lane_msg.left_coeffs  = [float(datos_izq['pendiente_prom'])]
+        lane_msg.right_coeffs = [float(datos_der['pendiente_prom'])]
 
         lane_msg.left_detected  = tiene_izq
         lane_msg.right_detected = tiene_der
@@ -184,7 +197,7 @@ class VisionNode(Node):
             f'calidad={self.calidad_filtrada:.2f}'
         )
 
-        # 7) Imagen debug — overlay + publicar (sin cv2.imshow en RPi5)
+        # 7) Imagen debug
         if self.debug:
             self._draw_debug_overlay(frame_resultado, zona_ref)
             try:

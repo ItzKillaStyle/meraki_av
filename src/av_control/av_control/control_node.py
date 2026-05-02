@@ -10,7 +10,7 @@ from av_interfaces.msg import LaneDetection
 
 
 # ── Prioridades de comando ────────────────────────────────────────────────────
-PRIO_TELEOP   = 0  # máxima prioridad
+PRIO_TELEOP   = 0
 PRIO_LANE     = 1
 PRIO_WAYPOINT = 2
 PRIO_DODGE    = 3
@@ -105,34 +105,50 @@ class ControlNode(Node):
         super().__init__('control_node')
 
         # ── Parámetros ────────────────────────────────────────────────────────
-        self.declare_parameter('wheelbase',          0.65)
-        self.declare_parameter('track_width',        0.55)
-        self.declare_parameter('max_speed_ms',       2.5)
-        self.declare_parameter('max_steering_rad',   0.5)
-        self.declare_parameter('control_hz',         20.0)
+        self.declare_parameter('wheelbase',              0.65)
+        self.declare_parameter('track_width',            0.55)
+        self.declare_parameter('max_speed_ms',           2.5)
+        self.declare_parameter('max_steering_rad',       0.5)
+        self.declare_parameter('control_hz',             20.0)
 
-        self.declare_parameter('pid_lane_kp',        0.8)
-        self.declare_parameter('pid_lane_ki',        0.02)
-        self.declare_parameter('pid_lane_kd',        0.15)
+        self.declare_parameter('pid_lane_kp',            0.8)
+        self.declare_parameter('pid_lane_ki',            0.02)
+        self.declare_parameter('pid_lane_kd',            0.15)
 
-        self.declare_parameter('pid_wp_kp',          1.0)
-        self.declare_parameter('pid_wp_ki',          0.01)
-        self.declare_parameter('pid_wp_kd',          0.20)
+        self.declare_parameter('pid_wp_kp',              1.0)
+        self.declare_parameter('pid_wp_ki',              0.01)
+        self.declare_parameter('pid_wp_kd',              0.20)
 
-        self.declare_parameter('speed_lane_ms',      0.40)
-        self.declare_parameter('speed_waypoint_ms',  0.35)
-        self.declare_parameter('speed_dodge_ms',     0.20)
-        self.declare_parameter('dodge_steer_factor', 0.60)
+        self.declare_parameter('speed_lane_ms',          0.40)
+        self.declare_parameter('speed_waypoint_ms',      0.35)
+        self.declare_parameter('speed_dodge_ms',         0.20)
+        self.declare_parameter('dodge_steer_factor',     0.60)
 
-        self.wheelbase      = self.get_parameter('wheelbase').value
-        self.track_width    = self.get_parameter('track_width').value
-        self.max_speed      = self.get_parameter('max_speed_ms').value
-        self.max_steer      = self.get_parameter('max_steering_rad').value
-        self.control_hz     = self.get_parameter('control_hz').value
-        self.speed_lane     = self.get_parameter('speed_lane_ms').value
-        self.speed_waypoint = self.get_parameter('speed_waypoint_ms').value
-        self.speed_dodge    = self.get_parameter('speed_dodge_ms').value
-        self.dodge_factor   = self.get_parameter('dodge_steer_factor').value
+        # Ganancia feedforward angular — cuánto peso tiene heading_angle
+        # sobre la corrección de dirección en seguimiento de carril
+        self.declare_parameter('lane_angle_ff_gain',     0.4)
+
+        # Umbral de calidad mínima para activar seguimiento de carril
+        # (debe coincidir con umbral_calidad en vision_node para coherencia)
+        self.declare_parameter('umbral_calidad',         0.3)
+
+        # Timeouts para fuentes externas (segundos)
+        self.declare_parameter('dodge_timeout_s',        0.5)
+        self.declare_parameter('waypoint_timeout_s',     1.0)
+
+        self.wheelbase          = self.get_parameter('wheelbase').value
+        self.track_width        = self.get_parameter('track_width').value
+        self.max_speed          = self.get_parameter('max_speed_ms').value
+        self.max_steer          = self.get_parameter('max_steering_rad').value
+        self.control_hz         = self.get_parameter('control_hz').value
+        self.speed_lane         = self.get_parameter('speed_lane_ms').value
+        self.speed_waypoint     = self.get_parameter('speed_waypoint_ms').value
+        self.speed_dodge        = self.get_parameter('speed_dodge_ms').value
+        self.dodge_factor       = self.get_parameter('dodge_steer_factor').value
+        self.lane_angle_ff_gain = self.get_parameter('lane_angle_ff_gain').value
+        self.umbral_calidad     = self.get_parameter('umbral_calidad').value
+        self.dodge_timeout_s    = self.get_parameter('dodge_timeout_s').value
+        self.waypoint_timeout_s = self.get_parameter('waypoint_timeout_s').value
 
         # ── Subsistemas ───────────────────────────────────────────────────────
         self.ackermann = AckermannDifferential(self.wheelbase, self.track_width)
@@ -150,22 +166,33 @@ class ControlNode(Node):
             -self.max_steer, self.max_steer)
 
         # ── Estado ────────────────────────────────────────────────────────────
-        self.teleop_active = False  # ← NUEVO
-        self.emergency     = False
-        self.lane_offset   = 0.0
-        self.lane_quality  = 0.0
-        self.lane_detected = False
-        self.dodge_dir     = 0.0
-        self.dodge_active  = False
-        self.wp_steer      = 0.0
-        self.wp_speed      = 0.0
-        self.wp_active     = False
-        self.current_prio  = PRIO_LANE
-        self.last_time     = self.get_clock().now()
+        self.teleop_active   = False
+        self.emergency       = False
+
+        # Lane
+        self.lane_offset     = 0.0
+        self.lane_angle      = 0.0    # heading_angle desde vision_node
+        self.lane_quality    = 0.0    # detection_quality desde vision_node
+        self.lane_detected   = False
+
+        # Dodge — con timestamp para timeout
+        self.dodge_dir       = 0.0
+        self.dodge_active    = False
+        self.dodge_last_time = None   # rclpy.Time
+
+        # Waypoint — con timestamp para timeout
+        self.wp_steer        = 0.0
+        self.wp_speed        = 0.0
+        self.wp_active       = False
+        self.wp_last_time    = None   # rclpy.Time
+
+        self.current_prio    = PRIO_LANE
+        self.last_time       = self.get_clock().now()
+        self._prev_prio      = PRIO_LANE   # para detectar cambios de modo
 
         # ── Subscribers ───────────────────────────────────────────────────────
         self.create_subscription(
-            Bool, '/teleop/active', self.cb_teleop, 10)       # ← NUEVO
+            Bool, '/teleop/active', self.cb_teleop, 10)
         self.create_subscription(
             Bool, '/emergency_stop', self.cb_estop, 10)
         self.create_subscription(
@@ -188,13 +215,31 @@ class ControlNode(Node):
             f'Control node iniciado — {self.control_hz}Hz | '
             f'wheelbase={self.wheelbase}m track={self.track_width}m | '
             f'Diferencial Ackermann ACTIVO | '
-            f'pwm_cmd → [servo_deg, FL, FR, RL, RR]'
+            f'pwm_cmd → [servo_deg, FL, FR, RL, RR] | '
+            f'lane_angle_ff_gain={self.lane_angle_ff_gain}'
         )
+
+    # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _elapsed_s(self, stamp) -> float:
+        """Segundos transcurridos desde stamp (rclpy.Time). Retorna inf si stamp es None."""
+        if stamp is None:
+            return float('inf')
+        return (self.get_clock().now() - stamp).nanoseconds / 1e9
+
+    def _on_mode_change(self, new_prio: int):
+        """Resetea integradores al cambiar de modo para evitar windup cruzado."""
+        if new_prio != self._prev_prio:
+            self.pid_lane.reset()
+            self.pid_wp.reset()
+            self.get_logger().info(
+                f'Cambio de modo: {self._prev_prio} → {new_prio}'
+            )
+            self._prev_prio = new_prio
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
 
     def cb_teleop(self, msg: Bool):
-        """Teleoperación activa — HC-12 Bridge manda directo, inhibir control_node."""
         prev = self.teleop_active
         self.teleop_active = msg.data
         if self.teleop_active and not prev:
@@ -215,17 +260,20 @@ class ControlNode(Node):
 
     def cb_lanes(self, msg: LaneDetection):
         self.lane_offset   = float(msg.center_offset)
-        self.lane_quality  = float(msg.left_coeffs[1]) if msg.left_coeffs else 0.0
+        self.lane_angle    = float(msg.heading_angle)       # campo explícito
+        self.lane_quality  = float(msg.detection_quality)   # campo explícito
         self.lane_detected = msg.left_detected or msg.right_detected
 
     def cb_dodge(self, msg: Point):
-        self.dodge_dir    = float(msg.x)
-        self.dodge_active = self.dodge_dir != 0.0
+        self.dodge_dir       = float(msg.x)
+        self.dodge_active    = self.dodge_dir != 0.0
+        self.dodge_last_time = self.get_clock().now()
 
     def cb_ackermann(self, msg: AckermannDriveStamped):
-        self.wp_steer  = float(msg.drive.steering_angle)
-        self.wp_speed  = float(msg.drive.speed)
-        self.wp_active = self.wp_speed > 0.0
+        self.wp_steer     = float(msg.drive.steering_angle)
+        self.wp_speed     = float(msg.drive.speed)
+        self.wp_active    = self.wp_speed > 0.0
+        self.wp_last_time = self.get_clock().now()
 
     # ── Loop de control ───────────────────────────────────────────────────────
 
@@ -234,19 +282,31 @@ class ControlNode(Node):
         dt  = (now - self.last_time).nanoseconds / 1e9
         self.last_time = now
 
-        # P0: Teleop — HC-12 Bridge publica directo, no interferir
+        # Expirar dodge y waypoint si no llegan mensajes nuevos
+        if self.dodge_active and self._elapsed_s(self.dodge_last_time) > self.dodge_timeout_s:
+            self.dodge_active = False
+            self.get_logger().warn('Dodge timeout — desactivado')
+
+        if self.wp_active and self._elapsed_s(self.wp_last_time) > self.waypoint_timeout_s:
+            self.wp_active = False
+            self.get_logger().warn('Waypoint timeout — desactivado')
+
+        # P0: Teleop
         if self.teleop_active:
+            self._on_mode_change(PRIO_TELEOP)
             self.current_prio = PRIO_TELEOP
             return
 
         # P4: Emergencia
         if self.emergency:
+            self._on_mode_change(PRIO_ESTOP)
             self._send(0.0, 0.0)
             self.current_prio = PRIO_ESTOP
             return
 
         # P3: Esquive
         if self.dodge_active:
+            self._on_mode_change(PRIO_DODGE)
             steer = float(np.clip(
                 self.dodge_dir * self.dodge_factor * self.max_steer,
                 -self.max_steer, self.max_steer))
@@ -254,11 +314,12 @@ class ControlNode(Node):
             self.current_prio = PRIO_DODGE
             return
 
-        # P2: Waypoints GPS
+        # P2: Waypoints GPS con corrección de carril opcional
         if self.wp_active:
+            self._on_mode_change(PRIO_WAYPOINT)
             steer = float(np.clip(self.wp_steer, -self.max_steer, self.max_steer))
             speed = float(np.clip(self.wp_speed, 0.0, self.max_speed))
-            if self.lane_detected and self.lane_quality > 0.3:
+            if self.lane_detected and self.lane_quality > self.umbral_calidad:
                 correction = self.pid_lane.update(self.lane_offset, dt) * 0.3
                 steer = float(np.clip(
                     steer + correction, -self.max_steer, self.max_steer))
@@ -266,9 +327,15 @@ class ControlNode(Node):
             self.current_prio = PRIO_WAYPOINT
             return
 
-        # P1: Seguimiento de carril
-        if self.lane_detected and self.lane_quality > 0.3:
-            steer = self.pid_lane.update(self.lane_offset, dt)
+        # P1: Seguimiento de carril — offset + feedforward angular
+        if self.lane_detected and self.lane_quality > self.umbral_calidad:
+            self._on_mode_change(PRIO_LANE)
+            steer_offset = self.pid_lane.update(self.lane_offset, dt)
+            # Feedforward angular: corrige orientación antes de que el offset crezca
+            steer_angle  = self.lane_angle * self.lane_angle_ff_gain
+            steer = float(np.clip(
+                steer_offset + steer_angle,
+                -self.max_steer, self.max_steer))
             self._send(steer, self.speed_lane)
             self.current_prio = PRIO_LANE
             return
@@ -279,8 +346,6 @@ class ControlNode(Node):
     # ── Publicación con diferencial Ackermann ─────────────────────────────────
 
     def _send(self, steering_rad: float, speed_ms: float):
-        # Convertir radianes a grados 0-180
-        # -max_steer → 0°, 0 → 90°, +max_steer → 180°
         servo_deg = 90.0 + float(np.degrees(
             np.clip(steering_rad, -self.max_steer, self.max_steer)
         ))

@@ -54,7 +54,7 @@ def generate_launch_description():
             default_value='',
             description='Ruta al archivo YAML de waypoints GPS'),
         DeclareLaunchArgument('model_path',
-            default_value='/home/carrito/models/best.pt',
+            default_value='/home/carrito/best.pt',
             description='Ruta al modelo YOLOv8 de señales'),
     ]
 
