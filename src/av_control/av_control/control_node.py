@@ -327,7 +327,7 @@ class ControlNode(Node):
             v_FL, v_FR, v_RL, v_RR = self.diff_model.compute(steering_rad, speed_norm)
 
         cmd      = Float32MultiArray()
-        cmd.data = [servo_deg, v_FL, v_FR, v_RL, v_RR]
+        cmd.data = [servo_deg, v_RR, v_RL, v_FL, v_FR]
         self.pub_pwm.publish(cmd)
 
         ack                      = AckermannDriveStamped()
