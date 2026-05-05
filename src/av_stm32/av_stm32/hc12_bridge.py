@@ -182,10 +182,10 @@ class HC12Bridge(Node):
             msg = Float32MultiArray()
             msg.data = [
                 s_deg,
-                float(obj.get('fl', 0.0)),
-                float(obj.get('fr', 0.0)),
                 float(obj.get('rl', 0.0)),
                 float(obj.get('rr', 0.0)),
+                float(obj.get('fl', 0.0)),
+                float(obj.get('fr', 0.0)),
             ]
             self.pub_pwm.publish(msg)
             teleop_msg = Bool(); teleop_msg.data = True
