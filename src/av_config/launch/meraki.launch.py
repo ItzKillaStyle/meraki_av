@@ -96,7 +96,7 @@ def generate_launch_description():
         name='hc12_bridge',
         parameters=[{
             'port': '/dev/ttyHC12',
-            'baud': 9600,
+            'baud': 19200,
         }],
         output='screen',
         condition=IfCondition(use_hc12),
