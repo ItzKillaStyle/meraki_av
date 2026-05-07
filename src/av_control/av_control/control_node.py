@@ -17,7 +17,7 @@ PRIO_ESTOP    = 4
 
 MODEL_ACKERMANN    = 'ackermann'
 MODEL_DIFFERENTIAL = 'differential'
-
+MIN_PWM = 0.3
 
 class PID:
     def __init__(self, kp, ki, kd, out_min, out_max):
@@ -106,6 +106,9 @@ class ControlNode(Node):
         self.declare_parameter('umbral_calidad',     0.3)
         self.declare_parameter('dodge_timeout_s',    0.5)
         self.declare_parameter('waypoint_timeout_s', 1.0)
+        self.declare_parameter('servo_center',  80.0)
+        self.declare_parameter('servo_left',    30.0)   # ángulo límite izquierda
+        self.declare_parameter('servo_right',  130.0)   # ángulo límite derecha
 
         # ── Parámetros nuevos: modelo de conducción ───────────────────────────
         # 'ackermann' | 'differential'
@@ -129,6 +132,9 @@ class ControlNode(Node):
         self.waypoint_timeout_s = self.get_parameter('waypoint_timeout_s').value
         self.drive_model        = self.get_parameter('drive_model').value
         self.diff_angular_gain  = self.get_parameter('diff_angular_gain').value
+        self.servo_center = self.get_parameter('servo_center').value
+        self.servo_left   = self.get_parameter('servo_left').value
+        self.servo_right  = self.get_parameter('servo_right').value
 
         # ── Modelos de cinemática ─────────────────────────────────────────────
         self.ackermann_model = AckermannDifferential(self.wheelbase, self.track_width)
@@ -190,6 +196,12 @@ class ControlNode(Node):
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
+
+    def _apply_min_pwm(self, v: float) -> float:
+        if v == 0.0:
+            return 0.0
+        return float(np.sign(v) * max(abs(v), MIN_PWM))
+
     def _elapsed_s(self, stamp):
         if stamp is None: return float('inf')
         return (self.get_clock().now() - stamp).nanoseconds / 1e9
@@ -200,6 +212,21 @@ class ControlNode(Node):
             self.pid_wp.reset()
             self.get_logger().info(f'Cambio de modo: {self._prev_prio} → {new_prio}')
             self._prev_prio = new_prio
+    def _map_servo(self, steering_rad: float) -> float:
+        """
+        Mapea steering_rad [-max_steer, +max_steer] a grados de servo.
+        steering_rad > 0 → derecha, < 0 → izquierda.
+        Usa rangos asimétricos si servo_left y servo_right no son equidistantes.
+        """
+        steer_clipped = float(np.clip(steering_rad, -self.max_steer, self.max_steer))
+        if steer_clipped >= 0:
+            # 0 → centro, +max_steer → servo_right
+            t = steer_clipped / self.max_steer
+            return self.servo_center + t * (self.servo_right - self.servo_center)
+        else:
+            # 0 → centro, -max_steer → servo_left
+            t = steer_clipped / (-self.max_steer)   # t positivo
+            return self.servo_center - t * (self.servo_center - self.servo_left)
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
 
@@ -312,19 +339,20 @@ class ControlNode(Node):
         self._send(0.0, 0.0)
 
     # ── Publicación ───────────────────────────────────────────────────────────
-
     def _send(self, steering_rad: float, speed_ms: float):
         speed_norm = float(np.clip(speed_ms / self.max_speed, -1.0, 1.0))
 
         if self.drive_model == MODEL_ACKERMANN:
-            servo_deg = 90.0 + float(np.degrees(
-                np.clip(steering_rad, -self.max_steer, self.max_steer)))
-            servo_deg = float(np.clip(servo_deg, 0.0, 180.0))
+            servo_deg = self._map_servo(steering_rad)          # ← mapeo nuevo
             v_FL, v_FR, v_RL, v_RR = self.ackermann_model.compute(steering_rad, speed_norm)
         else:
-            # Diferencial puro — servo centrado siempre
-            servo_deg = 90.0
+            servo_deg = self.servo_center                      # diferencial: siempre centro
             v_FL, v_FR, v_RL, v_RR = self.diff_model.compute(steering_rad, speed_norm)
+
+        v_FL = self._apply_min_pwm(v_FL)
+        v_FR = self._apply_min_pwm(v_FR)
+        v_RL = self._apply_min_pwm(v_RL)
+        v_RR = self._apply_min_pwm(v_RR)
 
         cmd      = Float32MultiArray()
         cmd.data = [servo_deg, v_RR, v_RL, v_FL, v_FR]
