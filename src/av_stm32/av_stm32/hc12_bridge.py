@@ -191,13 +191,6 @@ class HC12Bridge(Node):
             teleop_msg = Bool(); teleop_msg.data = True
             self.pub_teleop.publish(teleop_msg)
             self._last_cmd_time = time.time()
-        elif t == 'teleop':
-            active = bool(obj.get('active', False))
-            msg = Bool(); msg.data = active
-            self.pub_teleop.publish(msg)
-            if active:
-                self._last_cmd_time = time.time()  # evita que el watchdog lo apague inmediatamente
-            self.get_logger().info(f'Teleop manual → {"ON" if active else "OFF"}')
         elif t == 'waypoints':
             wps = obj.get('waypoints', [])
             if wps:
