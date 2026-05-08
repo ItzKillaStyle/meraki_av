@@ -50,6 +50,12 @@ def generate_launch_description():
         DeclareLaunchArgument('use_traffic_sign',
             default_value='true',
             description='Habilita detección de señales YOLOv8'),
+        DeclareLaunchArgument('use_camera_stream',
+            default_value='true',
+            description='Habilita web_video_server para stream HMI'),
+        DeclareLaunchArgument('stream_port',
+            default_value='8081',
+            description='Puerto HTTP del web_video_server'),
         DeclareLaunchArgument('waypoints_file',
             default_value='',
             description='Ruta al archivo YAML de waypoints GPS'),
@@ -64,6 +70,8 @@ def generate_launch_description():
     use_loc         = LaunchConfiguration('use_localization')
     use_hc12        = LaunchConfiguration('use_hc12')
     use_sign        = LaunchConfiguration('use_traffic_sign')
+    use_stream      = LaunchConfiguration('use_camera_stream')
+    stream_port     = LaunchConfiguration('stream_port')
     waypoints_file  = LaunchConfiguration('waypoints_file')
     model_path      = LaunchConfiguration('model_path')
 
@@ -112,6 +120,20 @@ def generate_launch_description():
         name='camera_node',
         parameters=[cfg('av_camera', 'camera.yaml')],
         output='screen',
+    )
+
+    # Stream de cámara para el HMI — se lanza junto con la cámara
+    web_video_server_node = Node(
+        package='web_video_server',
+        executable='web_video_server',
+        name='web_video_server',
+        parameters=[{
+            'port': stream_port,
+            'address': '0.0.0.0',
+            'default_stream_type': 'mjpeg',
+        }],
+        output='screen',
+        condition=IfCondition(use_stream),
     )
 
     lidar_node = Node(
@@ -237,18 +259,19 @@ def generate_launch_description():
         # 1. Primero el agente — debe estar listo antes que el STM32
         microros_agent,
 
-        # 2. 2s — STM32 espera al agente, HC-12 y sensores pasivos
+        # 2. 2s — STM32, HC-12, sensores pasivos y stream de cámara
         TimerAction(period=2.0, actions=[
             stm32_node,
             hc12_node,
             camera_node,
+            web_video_server_node,  # se lanza junto con la cámara
             gps_node,
         ]),
 
         # 3. 4s — LiDAR necesita hardware listo
         TimerAction(period=4.0, actions=[
             lidar_node,
-            av_lidar_node
+            av_lidar_node,
         ]),
 
         # 4. 6s — percepción necesita cámara y LiDAR listos
