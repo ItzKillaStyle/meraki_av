@@ -82,6 +82,7 @@ class TrafficSignNode(Node):
                 self.get_logger().warn(f'No se pudo cargar COCO: {e}')
 
         self.bridge = CvBridge()
+        self.last_result = None  # cache del último resultado para debug
 
         # ── Subscribers / Publishers ──────────────────────────────────────────
         self.create_subscription(Image, '/camera/image_raw', self.cb_image, 10)
@@ -118,6 +119,7 @@ class TrafficSignNode(Node):
             self.get_logger().error(f'Inferencia señales: {e}')
             return
 
+        self.last_result = results[0]  # cache para debug — evita segunda inferencia
         boxes = results[0].boxes
         if len(boxes) == 0:
             self._publish_sign(stamp, TrafficSign.NO_SIGN, 'none', 0.0)
@@ -174,16 +176,14 @@ class TrafficSignNode(Node):
 
     def _publish_debug(self, frame, stamp):
         try:
-            if self.model_signs:
-                results   = self.model_signs.predict(
-                    frame, conf=self.conf, imgsz=self.imgsz,
-                    device=self.device, verbose=False)
-                annotated = results[0].plot()
+            # Reutiliza el resultado cacheado de _detect_signs — sin segunda inferencia
+            if self.last_result is not None:
+                annotated = self.last_result.plot()
             else:
                 annotated = frame
-            debug_msg                  = self.bridge.cv2_to_imgmsg(annotated, encoding='bgr8')
-            debug_msg.header.stamp     = stamp
-            debug_msg.header.frame_id  = self.frame_id
+            debug_msg                 = self.bridge.cv2_to_imgmsg(annotated, encoding='bgr8')
+            debug_msg.header.stamp    = stamp
+            debug_msg.header.frame_id = self.frame_id
             self.pub_debug.publish(debug_msg)
         except Exception as e:
             self.get_logger().error(f'Debug: {e}')

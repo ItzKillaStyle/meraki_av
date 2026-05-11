@@ -17,7 +17,7 @@ PRIO_ESTOP    = 4
 
 MODEL_ACKERMANN    = 'ackermann'
 MODEL_DIFFERENTIAL = 'differential'
-MIN_PWM = 0.4
+MIN_PWM = 0.2
 
 class PID:
     def __init__(self, kp, ki, kd, out_min, out_max):
@@ -91,7 +91,7 @@ class ControlNode(Node):
         self.declare_parameter('track_width',        0.55)
         self.declare_parameter('max_speed_ms',       2.5)
         self.declare_parameter('max_steering_rad',   0.5)
-        self.declare_parameter('control_hz',         20.0)
+        self.declare_parameter('control_hz',         5.0)
         self.declare_parameter('pid_lane_kp',        0.8)
         self.declare_parameter('pid_lane_ki',        0.02)
         self.declare_parameter('pid_lane_kd',        0.15)
@@ -106,9 +106,9 @@ class ControlNode(Node):
         self.declare_parameter('umbral_calidad',     0.3)
         self.declare_parameter('dodge_timeout_s',    0.5)
         self.declare_parameter('waypoint_timeout_s', 1.0)
-        self.declare_parameter('servo_center',  80.0)
-        self.declare_parameter('servo_left',    30.0)   # ángulo límite izquierda
-        self.declare_parameter('servo_right',  130.0)   # ángulo límite derecha
+        self.declare_parameter('servo_center',  135.0)
+        self.declare_parameter('servo_left',    65.0)   # ángulo límite izquierda
+        self.declare_parameter('servo_right',  180.0)   # ángulo límite derecha
 
         # ── Parámetros nuevos: modelo de conducción ───────────────────────────
         # 'ackermann' | 'differential'

@@ -84,6 +84,8 @@ def generate_launch_description():
         executable='stm32_node',
         name='stm32_node',
         output='screen',
+        respawn=True,
+        respawn_delay=2.0,
     )
 
     microros_agent = Node(
@@ -92,6 +94,8 @@ def generate_launch_description():
         name='micro_ros_agent',
         arguments=['serial', '--dev', '/dev/ttyAMA0', '-b', '115200'],
         output='screen',
+        respawn=True,           # ← reinicia si muere
+        respawn_delay=2.0,      # ← espera 2s antes de reiniciar
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -108,6 +112,8 @@ def generate_launch_description():
         }],
         output='screen',
         condition=IfCondition(use_hc12),
+        respawn=True,
+        respawn_delay=2.0,
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -249,6 +255,8 @@ def generate_launch_description():
         name='control_node',
         parameters=[cfg('av_control', 'control.yaml')],
         output='screen',
+        respawn=True,
+        respawn_delay=2.0,
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
