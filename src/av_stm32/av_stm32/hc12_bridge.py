@@ -178,7 +178,14 @@ class HC12Bridge(Node):
 
         if t == 'cmd':
             s_norm = float(obj.get('s', 0.0))
-            s_deg  = float(np.clip(90.0 + s_norm * 90.0, 0.0, 180.0))
+            SERVO_CENTER = 135.0
+            SERVO_LEFT   = 65.0
+            SERVO_RIGHT  = 180.0
+            if s_norm >= 0:
+                s_deg = SERVO_CENTER + s_norm * (SERVO_RIGHT - SERVO_CENTER)
+            else:
+                s_deg = SERVO_CENTER + s_norm * (SERVO_CENTER - SERVO_LEFT)
+            s_deg = float(np.clip(s_deg, SERVO_LEFT, SERVO_RIGHT))
             msg = Float32MultiArray()
             msg.data = [
                 s_deg,
