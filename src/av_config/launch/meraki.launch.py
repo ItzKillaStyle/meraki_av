@@ -182,6 +182,7 @@ def generate_launch_description():
         package='av_vision',
         executable='traffic_sign_node',
         name='traffic_sign_node',
+        prefix = 'taskset -c 3',
         parameters=[{
             'model_path':      model_path,
             'conf_threshold':  0.5,
