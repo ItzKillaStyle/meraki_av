@@ -28,6 +28,7 @@ setup(
         'console_scripts': [
             'stm32_node = av_stm32.stm32_node:main',
             'hc12_bridge = av_stm32.hc12_bridge:main',
+            'stm32_bridge = av_stm32.stm32_bridge:main'
         ],
     },
 )
