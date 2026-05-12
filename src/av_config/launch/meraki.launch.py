@@ -79,23 +79,17 @@ def generate_launch_description():
     # 1. HARDWARE — STM32 + micro-ROS agent
     # ═══════════════════════════════════════════════════════════════════════════
 
-    stm32_node = Node(
+    stm32_bridge = Node(
         package='av_stm32',
-        executable='stm32_node',
-        name='stm32_node',
+        executable='stm32_bridge',
+        name='stm32_bridge',
+        parameters=[{
+            'port': '/dev/ttyAMA0',
+            'baud': 115200,
+        }],
         output='screen',
         respawn=True,
         respawn_delay=2.0,
-    )
-
-    microros_agent = Node(
-        package='micro_ros_agent',
-        executable='micro_ros_agent',
-        name='micro_ros_agent',
-        arguments=['serial', '--dev', '/dev/ttyAMA0', '-b', '115200'],
-        output='screen',
-        respawn=True,           # ← reinicia si muere
-        respawn_delay=2.0,      # ← espera 2s antes de reiniciar
     )
 
     # ═══════════════════════════════════════════════════════════════════════════
@@ -265,11 +259,10 @@ def generate_launch_description():
     return LaunchDescription(args + [
 
         # 1. Primero el agente — debe estar listo antes que el STM32
-        microros_agent,
+        stm32_bridge,
 
         # 2. 2s — STM32, HC-12, sensores pasivos y stream de cámara
         TimerAction(period=2.0, actions=[
-            stm32_node,
             hc12_node,
             camera_node,
             web_video_server_node,  # se lanza junto con la cámara
