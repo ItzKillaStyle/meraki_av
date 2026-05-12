@@ -17,7 +17,7 @@ PRIO_ESTOP    = 4
 
 MODEL_ACKERMANN    = 'ackermann'
 MODEL_DIFFERENTIAL = 'differential'
-MIN_PWM = 0.2
+MIN_PWM = 0.4
 
 class PID:
     def __init__(self, kp, ki, kd, out_min, out_max):
@@ -91,7 +91,7 @@ class ControlNode(Node):
         self.declare_parameter('track_width',        0.55)
         self.declare_parameter('max_speed_ms',       2.5)
         self.declare_parameter('max_steering_rad',   0.5)
-        self.declare_parameter('control_hz',         5.0)
+        self.declare_parameter('control_hz',         1.0)
         self.declare_parameter('pid_lane_kp',        0.8)
         self.declare_parameter('pid_lane_ki',        0.02)
         self.declare_parameter('pid_lane_kd',        0.15)
