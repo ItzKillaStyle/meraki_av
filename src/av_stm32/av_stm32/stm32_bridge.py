@@ -10,6 +10,7 @@ import serial
 import json
 import threading
 import time
+import queue
 
 
 class STM32Bridge(Node):
@@ -21,37 +22,39 @@ class STM32Bridge(Node):
         port = self.get_parameter('port').value
         baud = self.get_parameter('baud').value
 
-        # Publishers → ROS (datos que vienen del STM32)
-        self.pub_uf     = self.create_publisher(Float32, '/ultrasonic/front', 10)
-        self.pub_ur     = self.create_publisher(Float32, '/ultrasonic/rear',  10)
-        self.pub_imu_f  = self.create_publisher(String,  '/imu/front',        10)
-        self.pub_imu_r  = self.create_publisher(String,  '/imu/rear',         10)
+        # Publishers → ROS
+        self.pub_uf    = self.create_publisher(Float32, '/ultrasonic/front', 10)
+        self.pub_ur    = self.create_publisher(Float32, '/ultrasonic/rear',  10)
+        self.pub_imu_f = self.create_publisher(String,  '/imu/front',        10)
+        self.pub_imu_r = self.create_publisher(String,  '/imu/rear',         10)
 
-        # Subscriber → recibe comandos PWM y los manda al STM32
+        # Subscribers
         self.create_subscription(Float32MultiArray, '/control/pwm_cmd',
             self.cb_pwm, 10)
-
-        # Subscriber → teleop activo
-        self._teleop_active = False
         self.create_subscription(Bool, '/teleop/active',
             lambda m: setattr(self, '_teleop_active', m.data), 10)
 
+        self._teleop_active = False
         self._last_cmd = {'s': 135.0, 'rl': 0.0, 'rr': 0.0, 'fl': 0.0, 'fr': 0.0}
         self._lock = threading.Lock()
+        self._tx_queue = queue.Queue(maxsize=2)
+        self._running = True
 
         try:
             self.ser = serial.Serial(port, baud, timeout=0.1)
-            self.get_logger().info(f'STM32 conectado: {port} @ {baud}')
+            self.get_logger().info(f'STM32: {port} @ {baud}')
         except Exception as e:
             self.get_logger().error(f'Error UART: {e}')
             self.ser = None
 
-        # Timer TX → envía comando al STM32 cada 50ms
-        self.create_timer(0.05, self._send_cmd)
+        # Timer TX 20ms
+        self.create_timer(0.02, self._enqueue_cmd)
 
-        # Thread RX → lee telemetría del STM32
-        self._running = True
+        # Threads
+        threading.Thread(target=self._writer, daemon=True).start()
         threading.Thread(target=self._reader, daemon=True).start()
+
+    # ── Callbacks ────────────────────────────────────────────────────────────
 
     def cb_pwm(self, msg: Float32MultiArray):
         if len(msg.data) < 5:
@@ -65,26 +68,55 @@ class STM32Bridge(Node):
                 'fr': float(msg.data[4]),
             }
 
-    def _send_cmd(self):
-        if not self.ser or not self.ser.is_open:
-            return
+    # ── TX ────────────────────────────────────────────────────────────────────
+
+    def _enqueue_cmd(self):
         with self._lock:
             cmd = dict(self._last_cmd)
+        # Descartar comando viejo si la cola está llena
+        if self._tx_queue.full():
+            try:
+                self._tx_queue.get_nowait()
+            except queue.Empty:
+                pass
         try:
-            self.ser.write((json.dumps(cmd) + '\n').encode())
-        except Exception as e:
-            self.get_logger().error(f'TX error: {e}')
+            self._tx_queue.put_nowait(cmd)
+        except queue.Full:
+            pass
+
+    def _writer(self):
+        while self._running:
+            try:
+                cmd = self._tx_queue.get(timeout=0.1)
+                if not self.ser or not self.ser.is_open:
+                    continue
+                try:
+                    self.ser.write((json.dumps(cmd) + '\n').encode())
+                    self.ser.flush()
+                except Exception as e:
+                    self.get_logger().error(f'TX: {e}')
+            except queue.Empty:
+                continue
+
+    # ── RX ────────────────────────────────────────────────────────────────────
 
     def _reader(self):
         buf = ''
         while self._running:
             if not self.ser or not self.ser.is_open:
-                time.sleep(0.1)
+                time.sleep(0.05)
                 continue
             try:
                 waiting = self.ser.in_waiting
                 if waiting:
                     buf += self.ser.read(waiting).decode('utf-8', errors='ignore')
+
+                    # Si el buffer crece demasiado descartar datos viejos
+                    if len(buf) > 512:
+                        last_nl = buf.rfind('\n', 0, -1)
+                        if last_nl != -1:
+                            buf = buf[last_nl + 1:]
+
                     while '\n' in buf:
                         line, buf = buf.split('\n', 1)
                         line = line.strip()
@@ -96,18 +128,22 @@ class STM32Bridge(Node):
                         except json.JSONDecodeError:
                             pass
                 else:
-                    time.sleep(0.005)
+                    time.sleep(0.002)
             except Exception as e:
-                self.get_logger().error(f'RX error: {e}')
+                self.get_logger().error(f'RX: {e}')
                 time.sleep(0.1)
+
+    # ── Publicar telemetría ───────────────────────────────────────────────────
 
     def _publish_tel(self, obj):
         if 'uf' in obj:
-            msg = Float32(); msg.data = float(obj['uf'])
+            msg = Float32()
+            msg.data = float(obj['uf'])
             self.pub_uf.publish(msg)
 
         if 'ur' in obj:
-            msg = Float32(); msg.data = float(obj['ur'])
+            msg = Float32()
+            msg.data = float(obj['ur'])
             self.pub_ur.publish(msg)
 
         if 'imu_f' in obj:
@@ -121,6 +157,8 @@ class STM32Bridge(Node):
             imu = obj['imu_r']
             msg.data = json.dumps(imu) if isinstance(imu, dict) else str(imu)
             self.pub_imu_r.publish(msg)
+
+    # ── Cleanup ───────────────────────────────────────────────────────────────
 
     def destroy_node(self):
         self._running = False
