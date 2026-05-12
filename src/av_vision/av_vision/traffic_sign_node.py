@@ -52,7 +52,7 @@ class TrafficSignNode(Node):
         self.declare_parameter('model_path',      '/home/carrito/best.pt')
         self.declare_parameter('conf_threshold',   0.5)
         self.declare_parameter('device',           'cpu')
-        self.declare_parameter('imgsz',            320)
+        self.declare_parameter('imgsz',            160)
         self.declare_parameter('detect_vehicles',  True)
         self.declare_parameter('debug',            False)
         self.declare_parameter('frame_id',         'camera_link')
@@ -92,10 +92,15 @@ class TrafficSignNode(Node):
 
         self.get_logger().info(
             f'Traffic Sign Node | conf={self.conf} device={self.device} imgsz={self.imgsz}')
+        self._frame_count = 0
+        self._infer_every = 5 
 
     # ── Callback ──────────────────────────────────────────────────────────────
 
     def cb_image(self, msg: Image):
+        self._frame_count += 1
+        if self._frame_count % self._infer_every !=0:
+            return
         try:
             frame = self.bridge.imgmsg_to_cv2(msg, desired_encoding='bgr8')
         except CvBridgeError as e:

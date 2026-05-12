@@ -192,7 +192,7 @@ def generate_launch_description():
             'model_path':      model_path,
             'conf_threshold':  0.5,
             'device':          'cpu',
-            'imgsz':           320,
+            'imgsz':           160,
             'detect_vehicles': True,
             'debug':           debug,
         }],
