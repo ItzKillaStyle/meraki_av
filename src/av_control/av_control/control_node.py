@@ -17,7 +17,7 @@ PRIO_ESTOP    = 4
 
 MODEL_ACKERMANN    = 'ackermann'
 MODEL_DIFFERENTIAL = 'differential'
-MIN_PWM = 0.4
+MIN_PWM = 0.0
 
 class PID:
     def __init__(self, kp, ki, kd, out_min, out_max):
