@@ -29,7 +29,8 @@ setup(
     entry_points={
         'console_scripts': [
             'vision_node = av_vision.vision_node:main',
-            'traffic_sign_node = av_vision.traffic_sign_node:main'
+            'traffic_sign_node = av_vision.traffic_sign_node:main',
+            'video_recorder_node = av.camera.video_recorder_node:main'
         ],
     },
 )
