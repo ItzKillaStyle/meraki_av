@@ -33,7 +33,7 @@ def generate_launch_description():
     # ── Argumentos ────────────────────────────────────────────────────────────
     args = [
         DeclareLaunchArgument('debug',
-            default_value='false',
+            default_value='true',
             description='Publica topics de debug'),
         DeclareLaunchArgument('use_gps',
             default_value='true',
@@ -134,6 +134,18 @@ def generate_launch_description():
         }],
         output='screen',
         condition=IfCondition(use_stream),
+    )
+    video_recorder = Node(
+        package='av_camera',
+        executable='video_recorder_node',
+        name='video_recorder',
+        parameters=[{
+            'output_dir': '/home/carrito/videos',
+            'fps': 15.0,
+            'width': 640,
+            'height': 480,
+        }],
+        output='screen',
     )
 
     lidar_node = Node(
@@ -268,6 +280,7 @@ def generate_launch_description():
             camera_node,
             web_video_server_node,  # se lanza junto con la cámara
             gps_node,
+            video_recorder,
         ]),
 
         # 3. 4s — LiDAR necesita hardware listo
