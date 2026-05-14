@@ -59,13 +59,14 @@ class STM32Bridge(Node):
     def cb_pwm(self, msg: Float32MultiArray):
         if len(msg.data) < 5:
             return
+
         with self._lock:
             self._last_cmd = {
-                's':  float(msg.data[0]),
-                'rl': float(msg.data[1]),
-                'rr': float(msg.data[2]),
-                'fl': float(msg.data[3]),
-                'fr': float(msg.data[4]),
+                's':  round(float(msg.data[0]), 2),
+                'rl': round(float(msg.data[1]), 2),
+                'rr': round(float(msg.data[2]), 2),
+                'fl': round(float(msg.data[3]), 2),
+                'fr': round(float(msg.data[4]), 2),
             }
 
     # ── TX ────────────────────────────────────────────────────────────────────
