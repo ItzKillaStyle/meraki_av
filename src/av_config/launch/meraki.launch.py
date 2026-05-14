@@ -136,7 +136,7 @@ def generate_launch_description():
         condition=IfCondition(use_stream),
     )
     video_recorder = Node(
-        package='av_camera',
+        package='av_vision',
         executable='video_recorder_node',
         name='video_recorder',
         parameters=[{
