@@ -48,7 +48,7 @@ class STM32Bridge(Node):
             self.ser = None
 
         # Timer TX 20ms
-        self.create_timer(0.2, self._enqueue_cmd)
+        self.create_timer(0.5, self._enqueue_cmd)
 
         # Threads
         threading.Thread(target=self._writer, daemon=True).start()

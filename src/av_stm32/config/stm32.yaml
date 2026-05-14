@@ -2,7 +2,7 @@ stm32_bridge_node:
   ros__parameters:
     port: /dev/ttyAMA0
     baudrate: 460800
-    cmd_rate_hz: 5.0
+    cmd_rate_hz: 2.0
     watchdog_s: 5
     frame_id_front: imu_front_link
     frame_id_rear: imu_rear_link
