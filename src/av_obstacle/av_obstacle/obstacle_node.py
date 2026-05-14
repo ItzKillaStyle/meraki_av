@@ -97,7 +97,14 @@ class ObstacleNode(Node):
         )
         ranges  = ranges[valid]
         angles  = angles[valid]
-
+        if len(ranges) > 0:
+            # Mostrar el ángulo del punto más cercano
+            idx = np.argmin(ranges)
+            self.get_logger().info(
+                f'Punto más cercano: {ranges[idx]:.2f}m '
+                f'a {np.degrees(angles[idx]):.1f}° '
+                f'(0°=frente según nodo)'
+            )
         if len(ranges) == 0:
             self._publish_clear(msg.header)
             return
