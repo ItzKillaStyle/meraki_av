@@ -36,6 +36,7 @@ class STM32Bridge(Node):
 
         self._teleop_active = False
         self._last_cmd = {'s': 135.0, 'rl': 0.0, 'rr': 0.0, 'fl': 0.0, 'fr': 0.0}
+        self._sent_cmd = None
         self._lock = threading.Lock()
         self._tx_queue = queue.Queue(maxsize=2)
         self._running = True
@@ -77,7 +78,7 @@ class STM32Bridge(Node):
 
         # Comparar con tolerancia para el servo, exacto para motores
         if self._sent_cmd is not None:
-            servo_same = abs(cmd['s'] - self._sent_cmd['s']) < 10.0   # < 1° de diferencia
+            servo_same = abs(cmd['s'] - self._sent_cmd['s']) < 10.0   # < 10° de diferencia
             motors_same = all(
                 abs(cmd[k] - self._sent_cmd[k]) < 0.01
                 for k in ('rl', 'rr', 'fl', 'fr')
@@ -86,7 +87,15 @@ class STM32Bridge(Node):
                 return
 
         self._sent_cmd = dict(cmd)
-        ...
+        if self._tx_queue.full():
+            try:
+                self._tx_queue.get_nowait()
+            except queue.Empty:
+                pass
+        try:
+            self._tx_queue.put_nowait(cmd)
+        except queue.Full:
+            pass
 
     def _writer(self):
         while self._running:
