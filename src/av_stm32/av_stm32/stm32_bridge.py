@@ -74,16 +74,19 @@ class STM32Bridge(Node):
     def _enqueue_cmd(self):
         with self._lock:
             cmd = dict(self._last_cmd)
-        # Descartar comando viejo si la cola está llena
-        if self._tx_queue.full():
-            try:
-                self._tx_queue.get_nowait()
-            except queue.Empty:
-                pass
-        try:
-            self._tx_queue.put_nowait(cmd)
-        except queue.Full:
-            pass
+
+        # Comparar con tolerancia para el servo, exacto para motores
+        if self._sent_cmd is not None:
+            servo_same = abs(cmd['s'] - self._sent_cmd['s']) < 10.0   # < 1° de diferencia
+            motors_same = all(
+                abs(cmd[k] - self._sent_cmd[k]) < 0.01
+                for k in ('rl', 'rr', 'fl', 'fr')
+            )
+            if servo_same and motors_same:
+                return
+
+        self._sent_cmd = dict(cmd)
+        ...
 
     def _writer(self):
         while self._running:
