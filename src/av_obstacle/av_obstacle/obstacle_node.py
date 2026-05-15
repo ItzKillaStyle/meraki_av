@@ -183,10 +183,6 @@ class ObstacleNode(Node):
         # debug
         idx = np.argmin(ranges)
 
-        self.get_logger().info(
-            f'Cercano: {ranges[idx]:.2f}m | '
-            f'angulo={np.degrees(angles[idx]):.1f}°'
-        )
 
         # ─────────────────────────────────────────────────────────
         # Polar → cartesiano
