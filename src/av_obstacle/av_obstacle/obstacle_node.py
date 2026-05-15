@@ -45,6 +45,9 @@ class ObstacleNode(Node):
 
         # Esquive
         self.declare_parameter('dodge_angle_deg',    30.0)   # ángulo de giro esquive
+        self.declare_parameter('angle_offset_deg', 0.0)
+        self.angle_offset = np.deg2rad(
+        self.get_parameter('angle_offset_deg').value)
 
         self.range_min         = self.get_parameter('range_min').value
         self.range_max         = self.get_parameter('range_max').value
@@ -97,6 +100,8 @@ class ObstacleNode(Node):
         )
         ranges  = ranges[valid]
         angles  = angles[valid]
+        angles = angles + self.angle_offset
+        angles = np.arctan2(np.sin(angles), np.cos(angles))  # normalizar a [-π, π]
         if len(ranges) > 0:
             # Mostrar el ángulo del punto más cercano
             idx = np.argmin(ranges)
