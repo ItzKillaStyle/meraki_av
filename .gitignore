@@ -35,3 +35,8 @@ meraki_vision/
 # Entornos virtuales
 *_env/
 venv/
+
+#videos imagenes etc
+*.mp4
+*.avi
+*.png
