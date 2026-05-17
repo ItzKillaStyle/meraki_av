@@ -32,7 +32,8 @@ class HC12Bridge(Node):
         self.pub_pwm        = self.create_publisher(Float32MultiArray,'/control/pwm_cmd',           10)
         self.pub_waypoints  = self.create_publisher(String,           '/planning/set_waypoints_str',10)
         self.pub_active     = self.create_publisher(Bool,             '/planning/active',           10)
-        self.pub_drive_model= self.create_publisher(String,           '/control/drive_model',       10)  # NUEVO
+        self.pub_drive_model= self.create_publisher(String,           '/control/drive_model',       10)  
+        self.pub_recording = self.create_publisher(Bool, '/recording/active', 10)
 
         self._teleop_timer    = self.create_timer(0.5, self._teleop_watchdog)
         self._last_cmd_time   = 0.0
@@ -237,6 +238,14 @@ class HC12Bridge(Node):
                 self.get_logger().info(f'Modelo → {model}')
             else:
                 self.get_logger().warning(f'Modelo desconocido: {model}')
+
+        # En _parse_cmd
+        elif t == 'recording':
+            active = bool(obj.get('active', False))
+            msg = Bool()
+            msg.data = active
+            self.pub_recording.publish(msg)
+            self.get_logger().info(f'Recording → {"ON" if active else "OFF"}')
 
     def _teleop_watchdog(self):
         if time.time() - self._last_cmd_time > 1.0:

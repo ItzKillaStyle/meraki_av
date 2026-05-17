@@ -5,7 +5,7 @@ import rclpy
 from rclpy.node import Node
 from ackermann_msgs.msg import AckermannDriveStamped
 from std_msgs.msg import Float32MultiArray, Bool, String
-from geometry_msgs.msg import Point
+from geometry_msgs.msg import Point, TwistWithCovarianceStamped
 from av_interfaces.msg import LaneDetection
 
 
@@ -17,7 +17,7 @@ PRIO_ESTOP    = 4
 
 MODEL_ACKERMANN    = 'ackermann'
 MODEL_DIFFERENTIAL = 'differential'
-MIN_PWM = 0.4
+MIN_PWM = 0.15
 
 class PID:
     def __init__(self, kp, ki, kd, out_min, out_max):
@@ -109,6 +109,9 @@ class ControlNode(Node):
         self.declare_parameter('servo_center',  135.0)
         self.declare_parameter('servo_left',    65.0)   # ángulo límite izquierda
         self.declare_parameter('servo_right',  180.0)   # ángulo límite derecha
+        self.declare_parameter('pid_speed_kp', 0.5)
+        self.declare_parameter('pid_speed_ki', 0.02)
+        self.declare_parameter('pid_speed_kd', 0.0)
 
         # ── Parámetros nuevos: modelo de conducción ───────────────────────────
         # 'ackermann' | 'differential'
@@ -136,6 +139,11 @@ class ControlNode(Node):
         self.servo_left   = self.get_parameter('servo_left').value
         self.servo_right  = self.get_parameter('servo_right').value
 
+        # velocidad GPS actual
+        self.current_speed_gps = 0.0
+
+        # filtro low-pass GPS
+        self.gps_alpha = 0.2
         # ── Modelos de cinemática ─────────────────────────────────────────────
         self.ackermann_model = AckermannDifferential(self.wheelbase, self.track_width)
         self.diff_model      = DifferentialDrive(self.diff_angular_gain)
@@ -151,6 +159,14 @@ class ControlNode(Node):
             self.get_parameter('pid_wp_ki').value,
             self.get_parameter('pid_wp_kd').value,
             -self.max_steer, self.max_steer)
+        # crear PID velocidad
+        self.pid_speed = PID(
+            self.get_parameter('pid_speed_kp').value,
+            self.get_parameter('pid_speed_ki').value,
+            self.get_parameter('pid_speed_kd').value,
+            -1.0,
+            1.0
+        )
 
         # ── Estado ────────────────────────────────────────────────────────────
         self.teleop_active   = False
@@ -176,6 +192,7 @@ class ControlNode(Node):
         self.create_subscription(LaneDetection,       '/perception/lanes',        self.cb_lanes,    10)
         self.create_subscription(Point,               '/perception/dodge_direction', self.cb_dodge, 10)
         self.create_subscription(AckermannDriveStamped, '/planning/waypoint_cmd', self.cb_ackermann,10)
+        self.create_subscription(TwistWithCovarianceStamped, '/gps/vel', self.cb_gps_vel, 10)
 
         # Cambio de modelo en caliente — publica 'ackermann' o 'differential'
         self.create_subscription(String, '/control/drive_model', self.cb_drive_model, 10)
@@ -230,6 +247,17 @@ class ControlNode(Node):
 
     # ── Callbacks ─────────────────────────────────────────────────────────────
 
+    def cb_gps_vel(self, msg):
+
+        gps_speed = abs(
+            msg.twist.twist.linear.x
+        )
+
+        # filtro low-pass
+        self.current_speed_gps = (
+            self.gps_alpha * gps_speed +
+            (1.0 - self.gps_alpha) * self.current_speed_gps
+        )
     def cb_teleop(self, msg):
         prev = self.teleop_active
         self.teleop_active = msg.data
@@ -241,9 +269,13 @@ class ControlNode(Node):
 
     def cb_estop(self, msg):
         self.emergency = msg.data
+
         if self.emergency:
-            self.pid_lane.reset(); self.pid_wp.reset()
-            self.get_logger().warn('EMERGENCIA')
+            self.pid_lane.reset()
+            self.pid_wp.reset()
+
+            self._send(0.0, 0.0)
+        self.get_logger().warn('EMERGENCIA')
 
     def cb_lanes(self, msg):
         self.lane_offset   = float(msg.center_offset)
@@ -340,34 +372,109 @@ class ControlNode(Node):
 
     # ── Publicación ───────────────────────────────────────────────────────────
     def _send(self, steering_rad: float, speed_ms: float):
-        speed_norm = float(np.clip(speed_ms / self.max_speed, -1.0, 1.0))
+
+        # -------------------------------------------------------
+        # PID VELOCIDAD GPS
+        # -------------------------------------------------------
+
+        if speed_ms <= 0.01:
+
+            speed_norm = 0.0
+            self.pid_speed.reset()
+
+        else:
+
+            speed_error = (
+                speed_ms -
+                self.current_speed_gps
+            )
+
+            speed_norm = self.pid_speed.update(
+                speed_error,
+                1.0 / self.control_hz
+            )
+
+        speed_norm = float(
+            np.clip(speed_norm, -1.0, 1.0)
+        )
+
+        # -------------------------------------------------------
+        # MODELOS CINEMÁTICOS
+        # -------------------------------------------------------
 
         if self.drive_model == MODEL_ACKERMANN:
-            servo_deg = self._map_servo(steering_rad)          # ← mapeo nuevo
-            v_FL, v_FR, v_RL, v_RR = self.ackermann_model.compute(steering_rad, speed_norm)
+
+            servo_deg = self._map_servo(
+                steering_rad
+            )
+
+            v_FL, v_FR, v_RL, v_RR = (
+                self.ackermann_model.compute(
+                    steering_rad,
+                    speed_norm
+                )
+            )
+
         else:
-            servo_deg = self.servo_center                      # diferencial: siempre centro
-            v_FL, v_FR, v_RL, v_RR = self.diff_model.compute(steering_rad, speed_norm)
+
+            servo_deg = self.servo_center
+
+            v_FL, v_FR, v_RL, v_RR = (
+                self.diff_model.compute(
+                    steering_rad,
+                    speed_norm
+                )
+            )
+
+        # -------------------------------------------------------
+        # PWM mínimo
+        # -------------------------------------------------------
 
         v_FL = self._apply_min_pwm(v_FL)
         v_FR = self._apply_min_pwm(v_FR)
         v_RL = self._apply_min_pwm(v_RL)
         v_RR = self._apply_min_pwm(v_RR)
 
-        cmd      = Float32MultiArray()
-        cmd.data = [servo_deg, v_RR, v_RL, v_FL, v_FR]
+        # -------------------------------------------------------
+        # Publicar PWM
+        # -------------------------------------------------------
+
+        cmd = Float32MultiArray()
+
+        cmd.data = [
+            servo_deg,
+            v_RR,
+            v_RL,
+            v_FL,
+            v_FR
+        ]
+
         self.pub_pwm.publish(cmd)
 
-        ack                      = AckermannDriveStamped()
-        ack.header.stamp         = self.get_clock().now().to_msg()
+        # -------------------------------------------------------
+        # Publicar ackermann aplicado
+        # -------------------------------------------------------
+
+        ack = AckermannDriveStamped()
+
+        ack.header.stamp = (
+            self.get_clock().now().to_msg()
+        )
+
         ack.drive.steering_angle = steering_rad
-        ack.drive.speed          = speed_ms
+        ack.drive.speed = speed_ms
+
         self.pub_ackermann_out.publish(ack)
 
+        # -------------------------------------------------------
+        # Debug
+        # -------------------------------------------------------
+
         self.get_logger().debug(
-            f'[{self.drive_model}] prio={self.current_prio} | '
-            f'servo={servo_deg:.1f}° | '
-            f'FL={v_FL:+.2f} FR={v_FR:+.2f} RL={v_RL:+.2f} RR={v_RR:+.2f}'
+            f'GPS={self.current_speed_gps:.2f}m/s | '
+            f'REF={speed_ms:.2f}m/s | '
+            f'ERR={speed_error if speed_ms > 0 else 0:.2f} | '
+            f'PWM={speed_norm:.2f}'
         )
 
     def destroy_node(self):
