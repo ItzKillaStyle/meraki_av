@@ -3,6 +3,7 @@ import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge
+from std_msgs.msg import Bool
 import cv2
 import os
 import signal
@@ -24,6 +25,9 @@ class VideoRecorder(Node):
         height  = self.get_parameter('height').value
 
         os.makedirs(out_dir, exist_ok=True)
+
+        self.create_subscription(Bool, '/recording/active',
+                self.cb_recording, 10)
 
         self._filename = os.path.join(
             out_dir,
@@ -54,6 +58,14 @@ class VideoRecorder(Node):
 
     def _signal_handler(self, sig, frame):
         self._close()
+
+    def cb_recording(self, msg: Bool):
+        if not msg.data and not self._closed:
+            self._close()
+            self.get_logger().info('Grabación detenida por comando')
+        elif msg.data and self._closed:
+            # Reiniciar grabación con nuevo archivo
+            self._start_new_recording()
 
     def _close(self):
         if not self._closed:
