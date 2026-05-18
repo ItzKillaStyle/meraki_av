@@ -270,7 +270,7 @@ class ControlNode(Node):
     def cb_estop(self, msg):
         self.emergency = msg.data
 
-        if self.emergency:
+        if self.emergency and not self.teleop_active:
             self.pid_lane.reset()
             self.pid_wp.reset()
 
