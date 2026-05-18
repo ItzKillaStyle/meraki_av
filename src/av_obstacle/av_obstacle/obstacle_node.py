@@ -34,8 +34,8 @@ class ObstacleNode(Node):
         self.declare_parameter('range_min', 0.3)
         self.declare_parameter('range_max', 8.0)
 
-        self.declare_parameter('stop_dist_front', 0.80)
-        self.declare_parameter('stop_dist_lateral', 0.40)
+        self.declare_parameter('stop_dist_front', 1.50)
+        self.declare_parameter('stop_dist_lateral', 0.80)
 
         self.declare_parameter('warn_dist_front', 1.50)
         self.declare_parameter('warn_dist_lateral', 0.80)
