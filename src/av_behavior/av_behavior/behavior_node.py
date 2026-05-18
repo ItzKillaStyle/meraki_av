@@ -102,7 +102,7 @@ class BehaviorNode(Node):
         self.declare_parameter('obstacle_stop_dist',   0.3)
         self.declare_parameter('obstacle_dodge_dist',  0.8)
         self.declare_parameter('waypoint_reach_m',     0.5)
-        self.declare_parameter('nominal_speed',        0.5)   # m/s base
+        self.declare_parameter('nominal_speed',        1.5)   # m/s base
 
         self.stop_sign_wait    = self.get_parameter('stop_sign_wait_s').value
         self.yield_speed_factor= self.get_parameter('yield_speed_factor').value
