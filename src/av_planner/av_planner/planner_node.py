@@ -8,7 +8,7 @@ from nav_msgs.msg import Path
 from geometry_msgs.msg import PoseStamped, Point
 from ackermann_msgs.msg import AckermannDriveStamped
 from av_interfaces.srv import SetWaypoints
-from std_msgs.msg import Bool, String
+from std_msgs.msg import Bool, String, Float32
 
 
 # ── Constantes geográficas ────────────────────────────────────────────────────
@@ -52,12 +52,14 @@ class PlannerNode(Node):
         self.declare_parameter('max_steering_rad',  0.5)
         self.declare_parameter('nav_speed_ms',      0.35)
         self.declare_parameter('frame_id',          'map')
+        self.declare_parameter('heading_alpha',     0.15)
 
         self.reach_radius   = self.get_parameter('reach_radius_m').value
         self.plan_hz        = self.get_parameter('plan_hz').value
         self.max_steer      = self.get_parameter('max_steering_rad').value
         self.nav_speed      = self.get_parameter('nav_speed_ms').value
         self.frame_id       = self.get_parameter('frame_id').value
+        self.heading_alpha  = self.get_parameter('heading_alpha')
 
         # ── Estado interno ────────────────────────────────────────────────────
         # Lista de waypoints: [{'lat': float, 'lon': float, 'name': str}, ...]
@@ -90,6 +92,13 @@ class PlannerNode(Node):
         # ── Servicio para recibir waypoints estructurados ─────────────────────
         self.srv_waypoints = self.create_service(
             SetWaypoints, '/planning/set_waypoints', self.srv_set_waypoints)
+        
+        self.create_subscription(
+            Float32,
+            '/vehicle/heading',
+            self.cb_heading,
+            10
+        )
 
         # ── Publishers ────────────────────────────────────────────────────────
         # Comando de navegación hacia av_behavior/av_control
@@ -157,6 +166,29 @@ class PlannerNode(Node):
         self.current_lat = msg.latitude
         self.current_lon = msg.longitude
 
+    def cb_heading(self, msg):
+
+        new_heading = float(msg.data)
+
+        # filtro angular
+        dx = math.cos(new_heading)
+        dy = math.sin(new_heading)
+
+        cx = math.cos(self.current_heading)
+        cy = math.sin(self.current_heading)
+
+        fx = (
+            self.heading_alpha * dx +
+            (1.0 - self.heading_alpha) * cx
+        )
+
+        fy = (
+            self.heading_alpha * dy +
+            (1.0 - self.heading_alpha) * cy
+        )
+
+        self.current_heading = math.atan2(fy, fx)
+
     def cb_active(self, msg: Bool):
         self.active = msg.data
         if self.active:
@@ -207,7 +239,7 @@ class PlannerNode(Node):
         status.data = (
             f'active={self.active} '
             f'wp={self.current_wp_idx}/{len(self.waypoints)} '
-            f'fix={"yes" if self.current_lat else "no"}'
+            f'fix={"yes" if self.current_lat is not None else "no"}'
         )
         self.pub_status.publish(status)
 
@@ -257,8 +289,10 @@ class PlannerNode(Node):
         # Error angular entre heading actual y bearing al waypoint
         heading_error = target_bearing - self.current_heading
         # Normaliza a -π .. π
-        while heading_error >  math.pi: heading_error -= 2 * math.pi
-        while heading_error < -math.pi: heading_error += 2 * math.pi
+        heading_error = math.atan2(
+            math.sin(heading_error),
+            math.cos(heading_error)
+        )
 
         # Steering proporcional al error de heading
         # Ganancia 0.8 — ajustar en campo
@@ -268,9 +302,16 @@ class PlannerNode(Node):
         )
 
         # Velocidad reducida al acercarse al waypoint
-        speed = self.nav_speed
-        if dist < 2.0:
-            speed = self.nav_speed * 0.5
+        steer_ratio = abs(steer) / self.max_steer
+
+        speed = (
+            self.nav_speed *
+            (1.0 - 0.6 * steer_ratio)
+        )
+
+        speed = max(0.15, speed)
+        if dist < (self.reach_radius * 3.0):
+            speed *= 0.5
 
         # ── Publica comando hacia av_behavior ─────────────────────────────────
         cmd                              = AckermannDriveStamped()
