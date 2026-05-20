@@ -9,14 +9,15 @@ Subscribe sensores + GPS + Path → envía telemetría por HC-12
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, Float32, String, Bool
-from sensor_msgs.msg import NavSatFix
+from sensor_msgs.msg import NavSatFix, LaserScan
 from nav_msgs.msg import Path
 import serial
 import json
 import threading
 import numpy as np
 import time
-
+import asyncio
+import websockets   
 
 class HC12Bridge(Node):
     def __init__(self):
@@ -26,6 +27,8 @@ class HC12Bridge(Node):
         self.declare_parameter('baud', 115200)
         port = self.get_parameter('port').value
         baud = self.get_parameter('baud').value
+        self._lidar_clients = set()
+        self._loop = None  
 
         # Publishers → control
         self.pub_teleop     = self.create_publisher(Bool,             '/teleop/active',            10)
@@ -54,6 +57,10 @@ class HC12Bridge(Node):
         # Suscribirse al modelo activo para mantener estado local sincronizado
         self.create_subscription(String, '/control/drive_model_active',
             lambda m: setattr(self, '_current_model', m.data), 10)
+
+        # Suscribrse al lidar para enviar scan
+        self._lidar_counter = 0
+        self.create_subscription(LaserScan, '/lidar/scan', self.cb_lidar, 10)
 
         self.tel = {
             'uf': 0.0, 'ur': 0.0,
@@ -88,6 +95,29 @@ class HC12Bridge(Node):
              'lon': float(p.pose.position.y)}
             for p in msg.poses
         ]
+
+    def cb_lidar(self, msg: LaserScan):
+        self._lidar_counter += 1
+        if self._lidar_counter % 5 != 0:
+            return
+        if not self._loop or not self._lidar_clients:  # ← no procesar si no hay clientes
+            return
+        ranges = list(msg.ranges)
+        n      = len(ranges)
+        compact = []
+        for i in range(0, n, 8):
+            r = ranges[i]
+            if 0.15 < r < 8.0 and r == r:
+                compact.append(round(r, 2))
+        payload = json.dumps({
+            't':         'lidar',
+            'ranges':    compact,
+            'angle_min': round(msg.angle_min, 4),
+            'angle_inc': round(msg.angle_increment * 8, 4),
+            'n':         len(compact)
+        })
+        asyncio.run_coroutine_threadsafe(
+            self._broadcast_lidar(payload), self._loop)
 
     # ── Caché telemetría ──────────────────────────────────────────────────────
 
@@ -256,18 +286,62 @@ class HC12Bridge(Node):
         self._running = False
         if self.ser: self.ser.close()
         super().destroy_node()
+    
+    async def _broadcast_lidar(self, msg):
+        if not self._lidar_clients:
+            return
+        dead = set()
+        for client in self._lidar_clients:
+            try:
+                await asyncio.wait_for(client.send(msg), timeout=0.5)
+            except Exception:
+                dead.add(client)
+        self._lidar_clients -= dead
 
+    async def ws_lidar_handler(self, websocket):
+        self._lidar_clients.add(websocket)
+        try:
+            async for _ in websocket:
+                pass    
+        except websockets.exceptions.ConnectionClosed:
+            pass
+        finally:
+            self._lidar_clients.discard(websocket)
+
+async def _ros_spin(node):
+    executor = rclpy.executors.SingleThreadedExecutor()
+    executor.add_node(node)
+    try:
+        while rclpy.ok():
+            executor.spin_once(timeout_sec=0.0)  # ← timeout=0 no bloquea
+            await asyncio.sleep(0.01)
+    finally:
+        executor.shutdown()
+
+async def _run(node):
+    async with websockets.serve(node.ws_lidar_handler, '0.0.0.0', 8766):
+        await _ros_spin(node)
 
 def main(args=None):
     rclpy.init(args=args)
     node = HC12Bridge()
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+    node._loop = loop  # ← asignar loop al nodo
     try:
-        rclpy.spin(node)
+        loop.run_until_complete(_run(node))
     except KeyboardInterrupt:
         pass
     finally:
-        node.destroy_node()
-        rclpy.shutdown()
+        try:
+            node.destroy_node()
+        except Exception:
+            pass
+        try:
+            rclpy.shutdown()
+        except Exception:
+            pass
+        loop.close()
 
 
 if __name__ == '__main__':

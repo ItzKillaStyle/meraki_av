@@ -93,7 +93,7 @@ class BehaviorNode(Node):
 
         # ── Parámetros ────────────────────────────────────────────────────────
         self.declare_parameter('loop_hz',              20.0)
-        self.declare_parameter('stop_sign_wait_s',     3.0)
+        self.declare_parameter('stop_sign_wait_s',     10.0)
         self.declare_parameter('yield_speed_factor',   0.4)   # fracción de vel normal
         self.declare_parameter('crosswalk_timeout_s',  15.0)  # max espera en cruce
         self.declare_parameter('sign_confirm_s',       0.5)   # ventana filtro
