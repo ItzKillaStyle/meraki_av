@@ -29,6 +29,7 @@ class HC12Bridge(Node):
         baud = self.get_parameter('baud').value
         self._lidar_clients = set()
         self._loop = None  
+        self._lidar_streaming_clients = set()
 
         # Publishers → control
         self.pub_teleop     = self.create_publisher(Bool,             '/teleop/active',            10)
@@ -100,7 +101,7 @@ class HC12Bridge(Node):
         self._lidar_counter += 1
         if self._lidar_counter % 5 != 0:
             return
-        if not self._loop or not self._lidar_clients:  # ← no procesar si no hay clientes
+        if not self._loop or not self._lidar_streaming_clients:  
             return
         ranges = list(msg.ranges)
         n      = len(ranges)
@@ -286,27 +287,41 @@ class HC12Bridge(Node):
         self._running = False
         if self.ser: self.ser.close()
         super().destroy_node()
-    
+        
     async def _broadcast_lidar(self, msg):
-        if not self._lidar_clients:
+        if not self._lidar_streaming_clients:
             return
         dead = set()
-        for client in self._lidar_clients:
+        for client in self._lidar_streaming_clients:
             try:
                 await asyncio.wait_for(client.send(msg), timeout=0.5)
             except Exception:
                 dead.add(client)
+        self._lidar_streaming_clients -= dead
         self._lidar_clients -= dead
 
     async def ws_lidar_handler(self, websocket):
         self._lidar_clients.add(websocket)
+        self.get_logger().info('Cliente LiDAR conectado')
         try:
-            async for _ in websocket:
-                pass    
+            async for message in websocket:
+                try:
+                    obj = json.loads(message)
+                    if obj.get('t') == 'lidar_stream':
+                        active = bool(obj.get('active', False))
+                        if active:
+                            self._lidar_streaming_clients.add(websocket)
+                            self.get_logger().info('LiDAR stream ON')
+                        else:
+                            self._lidar_streaming_clients.discard(websocket)
+                            self.get_logger().info('LiDAR stream OFF')
+                except Exception:
+                    pass
         except websockets.exceptions.ConnectionClosed:
             pass
         finally:
             self._lidar_clients.discard(websocket)
+            self._lidar_streaming_clients.discard(websocket)
 
 async def _ros_spin(node):
     executor = rclpy.executors.SingleThreadedExecutor()

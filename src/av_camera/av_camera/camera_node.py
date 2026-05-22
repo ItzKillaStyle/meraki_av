@@ -13,9 +13,9 @@ class CameraNode(Node):
 
         # ── Parámetros ────────────────────────────────────────────────────────
         self.declare_parameter('device',         '/dev/video0')
-        self.declare_parameter('width',          640)
+        self.declare_parameter('width',          854)
         self.declare_parameter('height',         480)
-        self.declare_parameter('fps',            30)
+        self.declare_parameter('fps',            15)
         self.declare_parameter('frame_id',       'camera_link')
         self.declare_parameter('compressed_quality', 80)   # JPEG quality 0-100
 
@@ -61,31 +61,42 @@ class CameraNode(Node):
     # ── Abrir cámara UVC ──────────────────────────────────────────────────────
 
     def open_camera(self):
+
         self.cap = cv2.VideoCapture(self.device, cv2.CAP_V4L2)
 
         if not self.cap.isOpened():
-            self.get_logger().error(
-                f'No se pudo abrir {self.device} — '
-                f'verifica con: ls /dev/video*')
-            self.cap = None
+            self.get_logger().error(f'No se pudo abrir {self.device}')
             return
 
-        # Configura resolución y FPS en el driver V4L2
+        # ── MJPEG PRIMERO ─────────────────────────────
+        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+        self.cap.set(cv2.CAP_PROP_FOURCC, fourcc)
+
+        # ── Luego resolución y FPS ────────────────────
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH,  self.width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
         self.cap.set(cv2.CAP_PROP_FPS,          self.fps)
 
-        # Preferir MJPEG sobre YUYV — mucho menor ancho de banda USB
-        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-        self.cap.set(cv2.CAP_PROP_FOURCC, fourcc)
+        # ── Reducir buffer interno ────────────────────
+        self.cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
-        # Verifica resolución real obtenida
-        real_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        real_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        # ── Verificación real ─────────────────────────
+        real_w   = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        real_h   = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         real_fps = self.cap.get(cv2.CAP_PROP_FPS)
 
+        fourcc_int = int(self.cap.get(cv2.CAP_PROP_FOURCC))
+        fourcc_str = "".join([
+            chr((fourcc_int >> 8 * i) & 0xFF)
+            for i in range(4)
+        ])
+
         self.get_logger().info(
-            f'Cámara abierta — resolución real: {real_w}x{real_h} @ {real_fps:.1f} fps'
+            f'Resolución real: {real_w}x{real_h} @ {real_fps:.1f} FPS'
+        )
+
+        self.get_logger().info(
+            f'Formato real: {fourcc_str}'
         )
 
     # ── Callback enable/disable ───────────────────────────────────────────────
