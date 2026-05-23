@@ -13,7 +13,6 @@ from av_interfaces.msg import LaneDetection
 
 from av_vision.procesamiento_lineas import (
     detectar_y_analizar_lineas,
-    cargar_poligonos
 )
 
 
@@ -21,8 +20,6 @@ class VisionNode(Node):
 
     def __init__(self):
         super().__init__('vision_node')
-
-        cargar_poligonos()
 
         # ─────────────────────────────────────────────────────
         # Parámetros
