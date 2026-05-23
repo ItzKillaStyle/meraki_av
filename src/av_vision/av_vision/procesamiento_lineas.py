@@ -251,6 +251,19 @@ def detectar_y_analizar_lineas(frame):
     left_detected  = len(leftx)  > 500
     right_detected = len(rightx) > 500
 
+    left_fit  = None
+    right_fit = None
+
+    ploty = np.linspace(
+        0,
+        h-1,
+        h
+    )
+
+    # ======================================================
+    # FIT LEFT
+    # ======================================================
+
     if left_detected:
 
         left_fit = np.polyfit(
@@ -259,14 +272,23 @@ def detectar_y_analizar_lineas(frame):
             2
         )
 
-        left_base = (
-            left_fit[0]*h*h +
-            left_fit[1]*h +
+        left_fitx = (
+            left_fit[0]*ploty**2 +
+            left_fit[1]*ploty +
             left_fit[2]
         )
 
+        left_base = left_fitx[-1]
+
     else:
+
+        left_fitx = np.ones_like(ploty) * (w*0.3)
+
         left_base = w * 0.3
+
+    # ======================================================
+    # FIT RIGHT
+    # ======================================================
 
     if right_detected:
 
@@ -276,33 +298,179 @@ def detectar_y_analizar_lineas(frame):
             2
         )
 
-        right_base = (
-            right_fit[0]*h*h +
-            right_fit[1]*h +
+        right_fitx = (
+            right_fit[0]*ploty**2 +
+            right_fit[1]*ploty +
             right_fit[2]
         )
 
+        right_base = right_fitx[-1]
+
     else:
+
+        right_fitx = np.ones_like(ploty) * (w*0.7)
+
         right_base = w * 0.7
 
+    # ======================================================
+    # CENTRO
+    # ======================================================
+
     lane_center = (
-        left_base + right_base
+        left_base +
+        right_base
     ) / 2.0
 
     image_center = w / 2.0
 
     offset = (
-        lane_center - image_center
+        lane_center -
+        image_center
     ) / image_center
 
     offset = np.clip(offset, -1.0, 1.0)
+
+    # ======================================================
+    # QUALITY
+    # ======================================================
 
     quality = 0.0
 
     if left_detected and right_detected:
         quality = 1.0
+
     elif left_detected or right_detected:
         quality = 0.5
+
+    # ======================================================
+    # DIBUJAR CARRILES
+    # ======================================================
+
+    lane_vis = np.zeros_like(debug)
+
+    pts_left = np.array([
+        np.transpose(
+            np.vstack([left_fitx, ploty])
+        )
+    ])
+
+    pts_right = np.array([
+        np.flipud(
+            np.transpose(
+                np.vstack([right_fitx, ploty])
+            )
+        )
+    ])
+
+    pts = np.hstack((pts_left, pts_right))
+
+    cv2.fillPoly(
+        lane_vis,
+        np.int32([pts]),
+        (0,255,0)
+    )
+
+    # dibujar líneas
+
+    for i in range(len(ploty)-1):
+
+        cv2.line(
+            lane_vis,
+            (
+                int(left_fitx[i]),
+                int(ploty[i])
+            ),
+            (
+                int(left_fitx[i+1]),
+                int(ploty[i+1])
+            ),
+            (0,255,255),
+            5
+        )
+
+        cv2.line(
+            lane_vis,
+            (
+                int(right_fitx[i]),
+                int(ploty[i])
+            ),
+            (
+                int(right_fitx[i+1]),
+                int(ploty[i+1])
+            ),
+            (255,255,255),
+            5
+        )
+
+    # ======================================================
+    # UNWARP
+    # ======================================================
+
+    unwarped_lane = cv2.warpPerspective(
+        lane_vis,
+        Mi,
+        (640,480)
+    )
+
+    result = cv2.addWeighted(
+        frame,
+        1.0,
+        unwarped_lane,
+        0.45,
+        0
+    )
+
+    # ======================================================
+    # CENTRO VISUAL
+    # ======================================================
+
+    center_x = int(
+        lane_center
+    )
+
+    cv2.line(
+        debug,
+        (int(image_center), h),
+        (int(image_center), h-80),
+        (0,0,255),
+        3
+    )
+
+    cv2.line(
+        debug,
+        (center_x, h),
+        (center_x, h-80),
+        (255,0,0),
+        3
+    )
+
+    # ======================================================
+    # DEBUG TEXT
+    # ======================================================
+
+    cv2.putText(
+        result,
+        f'Offset: {offset:.3f}',
+        (20,40),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.8,
+        (0,255,0),
+        2
+    )
+
+    cv2.putText(
+        result,
+        f'Quality: {quality:.2f}',
+        (20,80),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.8,
+        (0,255,0),
+        2
+    )
+
+    # ======================================================
+    # ANALISIS
+    # ======================================================
 
     analisis = {
 
@@ -328,4 +496,4 @@ def detectar_y_analizar_lineas(frame):
 
     }
 
-    return debug, analisis
+    return result, analisis
