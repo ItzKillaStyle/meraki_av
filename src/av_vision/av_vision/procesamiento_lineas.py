@@ -248,6 +248,10 @@ def detectar_y_analizar_lineas(frame):
 
     h, w = binary.shape
 
+    # ======================================================
+    # DETECCIÓN ROBUSTA
+    # ======================================================
+
     left_detected  = len(leftx)  > 500
     right_detected = len(rightx) > 500
 
@@ -256,64 +260,100 @@ def detectar_y_analizar_lineas(frame):
 
     ploty = np.linspace(
         0,
-        h-1,
+        h - 1,
         h
     )
 
     # ======================================================
-    # FIT LEFT
+    # LEFT FIT
     # ======================================================
 
-    if left_detected:
+    if left_detected and len(leftx) > 50 and len(lefty) > 50:
 
-        left_fit = np.polyfit(
-            lefty,
-            leftx,
-            2
-        )
+        try:
 
-        left_fitx = (
-            left_fit[0]*ploty**2 +
-            left_fit[1]*ploty +
-            left_fit[2]
-        )
+            left_fit = np.polyfit(
+                lefty,
+                leftx,
+                2
+            )
 
-        left_base = left_fitx[-1]
+            left_fitx = (
+                left_fit[0] * ploty**2 +
+                left_fit[1] * ploty +
+                left_fit[2]
+            )
+
+            left_fitx = np.nan_to_num(left_fitx)
+
+            left_fitx = np.clip(
+                left_fitx,
+                0,
+                w - 1
+            )
+
+            left_base = float(left_fitx[-1])
+
+        except Exception:
+
+            left_detected = False
+
+            left_fitx = np.ones_like(ploty) * (w * 0.3)
+
+            left_base = float(w * 0.3)
 
     else:
 
-        left_fitx = np.ones_like(ploty) * (w*0.3)
+        left_fitx = np.ones_like(ploty) * (w * 0.3)
 
-        left_base = w * 0.3
+        left_base = float(w * 0.3)
 
     # ======================================================
-    # FIT RIGHT
+    # RIGHT FIT
     # ======================================================
 
-    if right_detected:
+    if right_detected and len(rightx) > 50 and len(righty) > 50:
 
-        right_fit = np.polyfit(
-            righty,
-            rightx,
-            2
-        )
+        try:
 
-        right_fitx = (
-            right_fit[0]*ploty**2 +
-            right_fit[1]*ploty +
-            right_fit[2]
-        )
+            right_fit = np.polyfit(
+                righty,
+                rightx,
+                2
+            )
 
-        right_base = right_fitx[-1]
+            right_fitx = (
+                right_fit[0] * ploty**2 +
+                right_fit[1] * ploty +
+                right_fit[2]
+            )
+
+            right_fitx = np.nan_to_num(right_fitx)
+
+            right_fitx = np.clip(
+                right_fitx,
+                0,
+                w - 1
+            )
+
+            right_base = float(right_fitx[-1])
+
+        except Exception:
+
+            right_detected = False
+
+            right_fitx = np.ones_like(ploty) * (w * 0.7)
+
+            right_base = float(w * 0.7)
 
     else:
 
-        right_fitx = np.ones_like(ploty) * (w*0.7)
+        right_fitx = np.ones_like(ploty) * (w * 0.7)
 
-        right_base = w * 0.7
+        right_base = float(w * 0.7)
 
     # ======================================================
-    # CENTRO
+    # CENTRO CARRIL
     # ======================================================
 
     lane_center = (
@@ -328,7 +368,11 @@ def detectar_y_analizar_lineas(frame):
         image_center
     ) / image_center
 
-    offset = np.clip(offset, -1.0, 1.0)
+    offset = np.clip(
+        offset,
+        -1.0,
+        1.0
+    )
 
     # ======================================================
     # QUALITY
@@ -337,70 +381,102 @@ def detectar_y_analizar_lineas(frame):
     quality = 0.0
 
     if left_detected and right_detected:
+
         quality = 1.0
 
     elif left_detected or right_detected:
+
         quality = 0.5
 
     # ======================================================
-    # DIBUJAR CARRILES
+    # VISUALIZACIÓN
     # ======================================================
 
-    lane_vis = np.zeros_like(debug)
+    lane_vis = np.zeros(
+        (h, w, 3),
+        dtype=np.uint8
+    )
 
     pts_left = np.array([
         np.transpose(
-            np.vstack([left_fitx, ploty])
+            np.vstack([
+                left_fitx,
+                ploty
+            ])
         )
     ])
 
     pts_right = np.array([
         np.flipud(
             np.transpose(
-                np.vstack([right_fitx, ploty])
+                np.vstack([
+                    right_fitx,
+                    ploty
+                ])
             )
         )
     ])
 
-    pts = np.hstack((pts_left, pts_right))
+    pts = np.hstack((
+        pts_left,
+        pts_right
+    )).astype(np.int32)
 
-    cv2.fillPoly(
-        lane_vis,
-        np.int32([pts]),
-        (0,255,0)
-    )
+    # ======================================================
+    # FILL LANE
+    # ======================================================
 
-    # dibujar líneas
+    try:
+
+        cv2.fillPoly(
+            lane_vis,
+            [pts],
+            (0,255,0)
+        )
+
+    except Exception:
+
+        pass
+
+    # ======================================================
+    # DIBUJAR LÍNEAS
+    # ======================================================
 
     for i in range(len(ploty)-1):
 
-        cv2.line(
-            lane_vis,
-            (
-                int(left_fitx[i]),
-                int(ploty[i])
-            ),
-            (
-                int(left_fitx[i+1]),
-                int(ploty[i+1])
-            ),
-            (0,255,255),
-            5
-        )
+        try:
 
-        cv2.line(
-            lane_vis,
-            (
-                int(right_fitx[i]),
-                int(ploty[i])
-            ),
-            (
-                int(right_fitx[i+1]),
-                int(ploty[i+1])
-            ),
-            (255,255,255),
-            5
-        )
+            cv2.line(
+                lane_vis,
+                (
+                    int(left_fitx[i]),
+                    int(ploty[i])
+                ),
+                (
+                    int(left_fitx[i+1]),
+                    int(ploty[i+1])
+                ),
+                (0,255,255),
+                4
+            )
+
+            cv2.line(
+                lane_vis,
+                (
+                    int(right_fitx[i]),
+                    int(ploty[i])
+                ),
+                (
+                    int(right_fitx[i+1]),
+                    int(ploty[i+1])
+                ),
+                (255,255,255),
+                4
+            )
+
+        except Exception:
+
+            pass
 
     # ======================================================
     # UNWARP
@@ -421,31 +497,29 @@ def detectar_y_analizar_lineas(frame):
     )
 
     # ======================================================
-    # CENTRO VISUAL
+    # CENTROS VISUALES
     # ======================================================
 
-    center_x = int(
-        lane_center
-    )
+    center_x = int(lane_center)
 
     cv2.line(
-        debug,
+        result,
         (int(image_center), h),
-        (int(image_center), h-80),
+        (int(image_center), h - 120),
         (0,0,255),
         3
     )
 
     cv2.line(
-        debug,
+        result,
         (center_x, h),
-        (center_x, h-80),
+        (center_x, h - 120),
         (255,0,0),
         3
     )
 
     # ======================================================
-    # DEBUG TEXT
+    # TEXTO DEBUG
     # ======================================================
 
     cv2.putText(
@@ -468,29 +542,49 @@ def detectar_y_analizar_lineas(frame):
         2
     )
 
+    cv2.putText(
+        result,
+        f'L: {left_detected}  R: {right_detected}',
+        (20,120),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.8,
+        (0,255,0),
+        2
+    )
+
     # ======================================================
-    # ANALISIS
+    # ANALISIS COMPATIBLE
     # ======================================================
 
     analisis = {
 
         "Izquierda": {
+
             "intermitencia": int(left_detected),
+
             "x_base": float(left_base),
+
             "pendiente_prom": 0.0
         },
 
         "Derecha": {
+
             "intermitencia": int(right_detected),
+
             "x_base": float(right_base),
+
             "pendiente_prom": 0.0
         },
 
         "Centro": {
+
             "intermitencia": int(
-                left_detected + right_detected
+                left_detected +
+                right_detected
             ),
+
             "x_base": float(lane_center),
+
             "pendiente_prom": 0.0
         }
 
