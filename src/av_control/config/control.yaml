@@ -3,12 +3,12 @@ control_node:
     wheelbase: 0.69 # distancia entre ejes [m] — MEDIR Y AJUSTAR
     track_width: 0.59 # distancia entre ruedas izq-der [m] — MEDIR Y AJUSTAR
     max_speed_ms: 2.5 # velocidad máxima [m/s]
-    max_steering_rad: 0.5 # ángulo máximo del servo [rad] (~28°) — CALIBRAR
+    max_steering_rad: 0.7
     control_hz: 10.0 # frecuencia del loop de control [Hz]
-
+    lane_angle_ff_gain: 1.2
     # PID seguimiento de carril
     # Ajuste inicial: kp=0.5 ki=0.0 kd=0.0, aumenta kp hasta que corrija bien
-    pid_lane_kp: 0.8
+    pid_lane_kp: 2.5
     pid_lane_ki: 0.02
     pid_lane_kd: 0.15
 
